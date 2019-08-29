@@ -67,6 +67,7 @@ if [ -f "${stackEnvFile}" ]; then
 	. "${stackEnvFile}"
 fi
 export REGISTRY WAVELET_BENCHMARK_NODES WAVELET_GENESIS WAVELET_KEYS WAVELET_NODES WAVELET_RICH_WALLETS
+export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA
 
 case "${action}" in
 	stop)
