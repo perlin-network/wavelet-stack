@@ -1,0 +1,97 @@
+#! /usr/bin/env bash
+
+stackName='testnet_local'
+
+function stackRunning() {
+	docker stack ps ${stackName} >/dev/null 2>/dev/null
+}
+
+function volumesExist() {
+	docker volume list | grep ${stackName}_wavelet_wavelet_db_instance_ >/dev/null
+}
+
+function stop() {
+	while stackRunning; do
+		docker stack rm ${stackName}
+		sleep 0.5
+	done
+
+	while volumesExist; do
+		docker volume prune -f
+		sleep 0.5
+	done
+}
+
+function start() {
+	docker stack deploy -c docker-compose.yml "${stackName}"
+}
+
+function status() {
+	if stackRunning; then
+		echo 'RUNNING'
+	else
+		echo 'NOT RUNNING'
+	fi
+
+	return 0
+}
+
+function usage() {
+	echo "Usage: manage [-s <stackName>] {stop|start|update|restart|status}"
+}
+
+while getopts 's:' arg; do
+	case "${arg}" in
+		s)
+			stackName="${OPTARG}"
+			;;
+		':'|'?')
+			usage >&2
+			exit 1
+			;;
+	esac
+done
+shift $[${OPTIND} - 1]
+
+action="$1"
+shift
+
+
+envFileDir="$(dirname "${BASH_SOURCE[0]}")/config"
+globalEnvFile="${envFileDir}/DEFAULT"
+stackEnvFile="${envFileDir}/${stackName}"
+if [ -f "${globalEnvFile}" ]; then
+	. "${globalEnvFile}"
+fi
+if [ -f "${stackEnvFile}" ]; then
+	. "${stackEnvFile}"
+fi
+export REGISTRY WAVELET_BENCHMARK_NODES WAVELET_GENESIS WAVELET_KEYS WAVELET_NODES WAVELET_RICH_WALLETS
+
+case "${action}" in
+	stop)
+		stop
+		exit "$?"
+		;;
+	start|update)
+		start
+		exit "$?"
+		;;
+	restart)
+		stop || exit "$?"
+		start
+		exit "$?"
+		;;
+	status|'')
+		status
+		exit "$?"
+		;;
+	help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac
