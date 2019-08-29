@@ -3,6 +3,7 @@
 syncURL="http://sync:2379/v2/keys"
 peersURL="${syncURL}/peers"
 walletsURL="${syncURL}/wallets"
+peerID="${WAVELET_NODE_ID}"
 
 function getKey() {
 	local id keys
@@ -39,7 +40,7 @@ function registerPeer() {
 	ip="$(getLocalIP)"
 	port="$1"
 
-	curl -SsL "${peersURL}/$(uname -n)" \
+	curl -SsL "${peersURL}/${peerID}" \
 		-X PUT \
 		--data value="${ip}:${port}" \
 		--data ttl=30 >/dev/null 2>/dev/null
@@ -60,7 +61,7 @@ function maintainPeerRegistry() {
 
 function getPeers() {
 	curl -SsL "${peersURL}" | \
-		jq -crM '.node.nodes[] | select(.key | contains("/peers/'"$(uname -n)"'") | not) | .value' 2>/dev/null
+		jq -crM '.node.nodes[] | select(.key | contains("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null
 }
 
 function setPeers() {
