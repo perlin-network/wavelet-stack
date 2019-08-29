@@ -1,0 +1,43 @@
+version: '3.7'
+services:
+        sync:
+                image: "elcolio/etcd:latest"
+                command: "-name wavelet"
+        wavelet:
+                image: "${REGISTRY-localhost:5000}/wavelet-stack-node"
+                command: "wavelet --port 3000 --api.port 9000 --db /db"
+                stdin_open: true
+                tty: true
+                environment:
+                        - WAVELET_SNOWBALL_K=2
+                        - WAVELET_SNOWBALL_BETA=25
+                        - WAVELET_MEMORY_MAX=150
+                        - WAVELET_NODE_ID={{.Task.Slot}}
+                        - WAVELET_KEYS=${WAVELET_KEYS}
+                        - WAVELET_GENESIS=${WAVELET_GENESIS}
+                        - WAVELET_RICH_WALLETS=${WAVELET_RICH_WALLETS-3}
+                volumes:
+                        - wavelet_db:/db
+                depends_on:
+                        - sync
+                deploy:
+                        replicas: ${WAVELET_NODES-3}
+                        update_config:
+                                parallelism: 1
+                                delay: 30s
+                healthcheck:
+                        test: "/opt/perlin/bin/health"
+        benchmark:
+                image: "${REGISTRY-localhost:5000}/wavelet-stack-node"
+                command: "benchmark remote -host wavelet:9000"
+                tty: true
+                depends_on:
+                        - wavelet
+                environment:
+                        - WAVELET_NODE_ID={{.Task.Slot}}
+                        - WAVELET_KEYS=${WAVELET_KEYS}
+                deploy:
+                        replicas: ${WAVELET_BENCHMARK_NODES-0}
+volumes:
+        wavelet_db:
+                name: "{{.Service.Name}}_wavelet_db_instance_{{.Task.Slot}}"

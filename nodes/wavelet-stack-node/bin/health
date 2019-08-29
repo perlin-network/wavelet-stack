@@ -1,0 +1,11 @@
+#! /usr/bin/env bash
+
+status="$(curl -s http://localhost:9000/ledger | jq -crM '.peers[].address')"
+
+if [ -n "${status}" ]; then
+	exit 0
+fi
+
+echo "FAILED: No peers" >&2
+
+exit 1

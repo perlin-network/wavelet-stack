@@ -1,0 +1,145 @@
+#! /bin/bash
+
+syncURL="http://sync:2379/v2/keys"
+peersURL="${syncURL}/peers"
+walletsURL="${syncURL}/wallets"
+
+function getKey() {
+	local id keys
+
+	id="$1"
+
+	if [ -z "${id}" ]; then
+		id=$["${WAVELET_NODE_ID}" - 1]
+	fi
+
+	keys="$(echo "${WAVELET_KEYS}" | cut -f $["${id}" + 1] -d ,)"
+	if [ -z "${keys}" ]; then
+		keys="$(awk -v id="${id}" '($1 == id) { print $2, $3; exit }' </opt/perlin/etc/wallets)"
+	fi
+
+	echo "${keys}"
+}
+
+function getPrivateKey() {
+	getKey "$@" | awk '{ print $1 }'
+}
+
+function getPublicKey() {
+	getKey "$@" | awk '{ print $2 }'
+}
+
+function getLocalIP() {
+	getent hosts "$(uname -n)" | awk '{ print $1 }'
+}
+
+function registerPeer() {
+	local ip port
+
+	ip="$(getLocalIP)"
+	port="$1"
+
+	curl -SsL "${peersURL}/$(uname -n)" \
+		-X PUT \
+		--data value="${ip}:${port}" \
+		--data ttl=30 >/dev/null 2>/dev/null
+}
+
+function maintainPeerRegistry() {
+	local port
+	port="$1"
+
+	(
+		while true; do
+			registerPeer "${port}"
+			sleep 10
+		done
+
+	) &
+}
+
+function getPeers() {
+	curl -SsL "${peersURL}" | \
+		jq -crM '.node.nodes[] | select(.key | contains("/peers/'"$(uname -n)"'") | not) | .value' 2>/dev/null
+}
+
+function setPeers() {
+	local try
+	local maxTries
+
+	maxTries=$[30 + (${WAVELET_NODE_ID} * 2) + $[RANDOM % 50]]
+
+	for ((try = 0; try < maxTries; try++)) {
+		peers=( $(getPeers) )
+		if [ "${#peers[@]}" != '0' ]; then
+			break
+		fi
+		sleep 1
+	}
+}
+
+function runWavelet() {
+	local port
+	local argNextArg
+
+	port='3000'
+	nextArg=''
+	for arg in "$@"; do
+		if [ -n "${nextArg}" ]; then
+			eval "${nextArg}"'=$arg'
+			nextArg=''
+		fi
+		case "${arg}" in
+			--port)
+				nextArg='port'
+				;;
+		esac
+	done
+
+	maintainPeerRegistry "${port}"
+	setPeers
+
+	if [ -z "${WAVELET_WALLET}" ]; then
+		WAVELET_WALLET="$(getPrivateKey)"
+	fi
+
+	if [ -z "${WAVELET_GENESIS}" ]; then
+		for ((idx = 0; idx < ${WAVELET_RICH_WALLETS}; idx++)) {
+			WAVELET_GENESIS="${WAVELET_GENESIS},"'"'"$(getPublicKey "${idx}")"'": {"balance": 10000000000000000000, "rewards": 5000000}'
+		}
+		WAVELET_GENESIS="{${WAVELET_GENESIS:1}}"
+	fi
+	export WAVELET_WALLET WAVELET_GENESIS
+
+	set | grep '^WAVELET'
+
+	exec /wavelet --host "$(getLocalIP)" "$@" "${peers[@]}"
+}
+
+function runBenchmark() {
+	exec /benchmark "$@" --wallet "$(getPrivateKey)"
+
+	exit 1
+}
+
+# Start the appropriate tool
+## Default to bash if no tool is specified
+if [ "$#" = '0' ]; then
+	set -- bash
+fi
+
+mode="$1"
+shift
+
+case "${mode}" in
+	wavelet)
+		runWavelet "$@"
+		;;
+	benchmark)
+		runBenchmark "$@"
+		;;
+	*)
+		# Any other tool, run it
+		exec "${mode}" "$@"
+		;;
+esac
