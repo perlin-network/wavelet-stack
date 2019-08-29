@@ -107,6 +107,10 @@ function runWavelet() {
 	maintainPeerRegistry "${port}"
 	setPeers
 
+	if [ -z "${WAVELET_MEMORY_MAX}" ] || [ "${WAVELET_MEMORY_MAX}" = '0' ]; then
+		unset WAVELET_MEMORY_MAX
+	fi
+
 	if [ -z "${WAVELET_WALLET}" ]; then
 		WAVELET_WALLET="$(getPrivateKey)"
 	fi

@@ -16,7 +16,7 @@ services:
                 environment:
                         - WAVELET_SNOWBALL_K=${WAVELET_SNOWBALL_K-2}
                         - WAVELET_SNOWBALL_BETA=${WAVELET_SNOWBALL_BETA-25}
-                        - WAVELET_MEMORY_MAX=150
+                        - WAVELET_MEMORY_MAX=${WAVELET_MEMORY_MAX}
                         - WAVELET_NODE_ID={{.Task.Slot}}
                         - WAVELET_KEYS=${WAVELET_KEYS}
                         - WAVELET_GENESIS=${WAVELET_GENESIS}
