@@ -7,7 +7,7 @@ function stackRunning() {
 }
 
 function volumesExist() {
-	docker volume list | grep ${stackName}_wavelet_wavelet_db_instance_ >/dev/null
+	docker volume list -q | grep "^${stackName}_wavelet_wavelet_db_instance_" >/dev/null
 }
 
 function stop() {
@@ -16,10 +16,12 @@ function stop() {
 		sleep 0.5
 	done
 
-	while volumesExist; do
-		docker volume prune -f
-		sleep 0.5
-	done
+	if [ "${WAVELET_CLEAN_VOLUMES}" = 'yes' ]; then
+		while volumesExist; do
+			docker volume prune -f
+			sleep 0.5
+		done
+	fi
 }
 
 function start() {
@@ -36,8 +38,44 @@ function status() {
 	return 0
 }
 
+function containerIDFromNodeID() {
+	local nodeID taskID containerID
+
+	nodeID="$1"
+	if [ -z "${nodeID}" ]; then
+		echo "ID Required" >&2
+		usage >&2
+		return 1
+	fi
+
+	taskID="$(docker stack ps -q -f NAME="${stackName}_wavelet.${nodeID}" "${stackName}")" || return 1
+	containerID="$(docker inspect "${taskID}" | jq -crM '.[0].Status.ContainerStatus.ContainerID')" || return 1
+
+	echo "${containerID}"
+}
+
+function attach() {
+	local nodeID containerID
+
+	nodeID="$1"
+	containerID="$(containerIDFromNodeID "${nodeID}")" || return 1
+
+	docker attach "${containerID}"
+}
+
+function shell() {
+	local nodeID containerID
+
+	nodeID="$1"
+	containerID="$(containerIDFromNodeID "${nodeID}")" || return 1
+
+	docker exec -it "${containerID}" bash
+}
+
 function usage() {
 	echo "Usage: manage [-s <stackName>] {stop|start|update|restart|status}"
+	echo "       manage [-s <stackName>] attach <nodeId>"
+	echo "       manage [-s <stackName>] shell <nodeId>"
 }
 
 while getopts 's:' arg; do
@@ -56,13 +94,13 @@ shift $[${OPTIND} - 1]
 action="$1"
 shift
 
-
 envFileDir="$(dirname "${BASH_SOURCE[0]}")/config"
 globalEnvFile="${envFileDir}/DEFAULT"
-stackEnvFile="${envFileDir}/${stackName}"
 if [ -f "${globalEnvFile}" ]; then
 	. "${globalEnvFile}"
 fi
+
+stackEnvFile="${envFileDir}/${stackName}"
 if [ -f "${stackEnvFile}" ]; then
 	. "${stackEnvFile}"
 fi
@@ -85,6 +123,10 @@ case "${action}" in
 		;;
 	status|'')
 		status
+		exit "$?"
+		;;
+	attach|shell)
+		"${action}" "$@"
 		exit "$?"
 		;;
 	help)
