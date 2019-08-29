@@ -3,6 +3,11 @@
 REGISTRY="${REGISTRY:-localhost:5000}"
 export REGISTRY
 
+defaultConfig="$(dirname "${BASH_SOURCE[0]}")/../../config/DEFAULT"
+if [ -f "${defaultConfig}" ]; then
+	. "${defaultConfig}"
+fi
+
 set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
