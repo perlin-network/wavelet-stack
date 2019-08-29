@@ -36,7 +36,7 @@ function stop() {
 }
 
 function start() {
-	docker stack deploy -c docker-compose.yml "${stackName}"
+	docker stack deploy --with-registry-auth -c docker-compose.yml "${stackName}"
 }
 
 function status() {
