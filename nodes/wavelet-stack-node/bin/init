@@ -125,7 +125,7 @@ function runWavelet() {
 
 	set | grep '^WAVELET'
 
-	exec /wavelet --host "$(getLocalIP)" "$@" "${peers[@]}"
+	exec /wavelet --nat --host "$(getLocalIP)" "$@" "${peers[@]}"
 }
 
 function runBenchmark() {
