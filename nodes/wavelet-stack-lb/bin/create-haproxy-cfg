@@ -1,0 +1,111 @@
+#! /usr/bin/env bash
+
+configDir="/usr/local/etc/haproxy"
+configFileTemplate="${configDir}/haproxy.cfg.in"
+configFile="${configDir}/haproxy.cfg"
+
+function getPeers() {
+	curl -sS http://sync:2379/v2/keys/peers 2>/dev/null | jq -crM '.node.nodes[].value'
+}
+
+function getNode1() {
+	curl -sS http://sync:2379/v2/keys/peers/1 | jq -crM .node.value
+}
+
+function generateHAProxyRPCConfiguration() {
+	local id peer port
+	for peer in $(getPeers); do
+		id="$(echo "${peer}" | sha1sum | cut -c 1-24)"
+		port="$(echo "${peer}" | cut -f 2 -d :)"
+
+		echo "frontend wavelet-rpc-in-${port}"
+		echo "    bind :::${port} v4v6"
+		echo "    default_backend wavelet-rpc-back-${port}"
+		echo ""
+		echo "backend wavelet-rpc-back-${port}"
+		echo "    server wavelet-rpc-${port} ${peer}"
+		echo ""
+	done
+
+	return 0
+}
+
+function generateHAProxyAPIConfiguration() {
+	local id peer
+
+	echo "frontend wavelet-api-in"
+	echo "    bind :::80 v4v6"
+	echo "    default_backend wavelet-api-back"
+	echo ""
+	echo "backend wavelet-api-back"
+	echo "    mode http"
+
+	for peer in $(getNode1); do
+		id="$(echo "${peer}" | sha1sum | cut -c 1-24)"
+		peer="$(echo "${peer}" | cut -f 1 -d :)"
+
+		echo "    server wavelet-api-${id} ${peer}:9000 check"
+	done
+
+	return 0
+}
+
+
+function updateConfig() {
+	local waveletRPCConfig waveletAPIConfig haproxyPids
+
+	waveletRPCConfig="$(generateHAProxyRPCConfiguration)" || return
+	if [ -z "${waveletRPCConfig}" ]; then
+		return
+	fi
+
+	waveletAPIConfig="$(generateHAProxyAPIConfiguration)" || return
+	if [ -z "${waveletAPIConfig}" ]; then
+		return
+	fi
+
+	awk \
+		-v "waveletRPCConfig=${waveletRPCConfig}" \
+		-v "waveletAPIConfig=${waveletAPIConfig}" \
+		'
+			/@@WAVELET_RPC_CONFIG@@/{
+				print waveletRPCConfig;
+				next;
+			}
+
+			/@@WAVELET_API_CONFIG@@/{
+				print waveletAPIConfig;
+				next;
+			}
+
+			{ print; }
+	' < "${configFileTemplate}" > "${configFile}.new" || return
+
+	if ! cmp "${configFile}" "${configFile}.new" >/dev/null 2>/dev/null; then
+		mv "${configFile}.new" "${configFile}"
+
+		haproxyPids=($(pgrep -x haproxy))
+		if [ -n "${haproxyPids[*]}" ]; then
+			kill -USR2 "${haproxyPids[@]}"
+		fi
+	fi
+
+	rm -f "${configFile}.new"
+}
+
+# Periodically create the config file
+while true; do
+	updateConfig
+
+	sleep 10
+done &
+
+# Wait for the config file to be created
+while true; do
+	if [ -f "${configFile}" ]; then
+		break
+	fi
+	sleep 1
+done
+
+exit 0

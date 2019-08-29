@@ -1,0 +1,16 @@
+global
+    user    nobody
+    maxconn 16384
+
+defaults
+    mode    tcp
+    timeout connect 5s
+    timeout client 50s
+    timeout server 50s
+    timeout tunnel 50s
+    option  http-server-close
+    log     global
+
+@@WAVELET_API_CONFIG@@
+
+@@WAVELET_RPC_CONFIG@@

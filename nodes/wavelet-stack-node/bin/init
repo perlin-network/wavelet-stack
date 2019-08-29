@@ -82,9 +82,11 @@ function setPeers() {
 function runWavelet() {
 	local port
 	local argNextArg
+	local needPort
 
-	port='3000'
+	port=$[${WAVELET_NODE_ID} -1 + 3000]
 	nextArg=''
+	needPort='true'
 	for arg in "$@"; do
 		if [ -n "${nextArg}" ]; then
 			eval "${nextArg}"'=$arg'
@@ -93,9 +95,14 @@ function runWavelet() {
 		case "${arg}" in
 			--port)
 				nextArg='port'
+				needPort='false'
 				;;
 		esac
 	done
+
+	if [ "${needPort}" = 'true' ]; then
+		set -- "$@" --port "${port}"
+	fi
 
 	maintainPeerRegistry "${port}"
 	setPeers
