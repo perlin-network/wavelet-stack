@@ -108,6 +108,8 @@ function nobenchmark() {
 	docker service scale "${stackName}_benchmark=0"
 }
 
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
+
 while getopts 's:' arg; do
 	case "${arg}" in
 		s)
