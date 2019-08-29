@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-stackName='testnet_local'
+stackName='testnet-local'
 
 function stackRunning() {
 	docker stack ps ${stackName} >/dev/null 2>/dev/null
