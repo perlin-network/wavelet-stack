@@ -3,9 +3,14 @@ services:
         sync:
                 image: "elcolio/etcd:latest"
                 command: "-name wavelet"
+        loadbalancer:
+                image: "${REGISTRY-localhost:5000}/wavelet-stack-lb"
+                ports:
+                        - "80:80"
+                        - "3000-3100:3000-3100"
         wavelet:
                 image: "${REGISTRY-localhost:5000}/wavelet-stack-node"
-                command: "wavelet --port 3000 --api.port 9000 --db /db"
+                command: "wavelet --api.port 9000 --db /db"
                 stdin_open: true
                 tty: true
                 environment:
