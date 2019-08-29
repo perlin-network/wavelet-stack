@@ -69,7 +69,7 @@ function containerIDFromNodeID() {
 		taskName="${stackName}_wavelet.${nodeID}"
 	fi
 
-	taskID="$(docker stack ps -q -f NAME="${taskName}" "${stackName}")" || return 1
+	taskID="$(docker stack ps -q -f NAME="${taskName}" "${stackName}" | head -n 1)" || return 1
 	containerID="$(docker inspect "${taskID}" | jq -crM '.[0].Status.ContainerStatus.ContainerID')" || return 1
 
 	echo "${containerID}"
