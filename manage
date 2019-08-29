@@ -10,6 +10,17 @@ function volumesExist() {
 	docker volume list -q | grep "^${stackName}_wavelet_wavelet_db_instance_" >/dev/null
 }
 
+function benchmarkRunning() {
+	local replicas
+
+	replicas="$(docker service inspect "${stackName}_benchmark" | jq '.[].Spec.Mode.Replicated.Replicas')"
+	if [ "${replicas}" = '0' ]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
 function stop() {
 	while stackRunning; do
 		docker stack rm ${stackName}
@@ -30,7 +41,11 @@ function start() {
 
 function status() {
 	if stackRunning; then
-		echo 'RUNNING'
+		if benchmarkRunning; then
+			echo 'RUNNING BENCHMARKING'
+		else
+			echo 'RUNNING'
+		fi
 	else
 		echo 'NOT RUNNING'
 	fi
@@ -39,7 +54,7 @@ function status() {
 }
 
 function containerIDFromNodeID() {
-	local nodeID taskID containerID
+	local nodeID taskName taskID containerID
 
 	nodeID="$1"
 	if [ -z "${nodeID}" ]; then
@@ -48,7 +63,13 @@ function containerIDFromNodeID() {
 		return 1
 	fi
 
-	taskID="$(docker stack ps -q -f NAME="${stackName}_wavelet.${nodeID}" "${stackName}")" || return 1
+	if [ "${nodeID}" = 'benchmark' ]; then
+		taskName="${stackName}_benchmark.1"
+	else
+		taskName="${stackName}_wavelet.${nodeID}"
+	fi
+
+	taskID="$(docker stack ps -q -f NAME="${taskName}" "${stackName}")" || return 1
 	containerID="$(docker inspect "${taskID}" | jq -crM '.[0].Status.ContainerStatus.ContainerID')" || return 1
 
 	echo "${containerID}"
@@ -74,8 +95,17 @@ function shell() {
 
 function usage() {
 	echo "Usage: manage [-s <stackName>] {stop|start|update|restart|status}"
-	echo "       manage [-s <stackName>] attach <nodeId>"
-	echo "       manage [-s <stackName>] shell <nodeId>"
+	echo "       manage [-s <stackName>] {benchmark|nobenchmark}"
+	echo "       manage [-s <stackName>] {attach|shell} <nodeId>"
+}
+
+function benchmark() {
+	docker service scale "${stackName}_benchmark=1" || return 1
+	attach benchmark
+}
+
+function nobenchmark() {
+	docker service scale "${stackName}_benchmark=0"
 }
 
 while getopts 's:' arg; do
@@ -125,7 +155,7 @@ case "${action}" in
 		status
 		exit "$?"
 		;;
-	attach|shell)
+	attach|shell|benchmark|nobenchmark)
 		"${action}" "$@"
 		exit "$?"
 		;;
