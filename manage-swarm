@@ -1,0 +1,220 @@
+#! /usr/bin/env bash
+
+function create_digitalocean() {
+	local name token count
+	local idx
+	local pids
+	local node1 ip
+	local arg nextArg docker_machine_args
+
+	name="$1"
+	token="$2"
+	count='3'
+	shift; shift;
+
+	if [ -z "${name}" -o -z "${token}" ]; then
+		echo "Usage: manage-swarm create digitalocean <swarmName> <apiToken> [--count <n>]" >&2
+		echo "                    [--size <n>] [--region <name>]" >&2
+
+		return 1
+	fi
+
+	docker_machine_args=()
+
+	nextArg=''
+	docker_machine_args=(
+		--digitalocean-tags "docker-swarm,${name}"
+	)
+	for arg in "$@"; do
+		if [ -n "${nextArg}" ]; then
+			if [ "${nextArg}" = '+' ]; then
+				docker_machine_args+=("${arg}")
+			else
+				eval "${nextArg}="'"${arg}"'
+			fi
+			nextArg=''
+			continue
+		fi
+		case "${arg}" in
+			--size|--region)
+				docker_machine_args+=("--digitalocean-${arg:2}")
+				nextArg='+'
+				;;
+			--count)
+				nextArg='count'
+				;;
+		esac
+	done
+
+	pids=()
+	for ((idx = 1; idx <= count; idx++)) {
+		docker-machine create --driver digitalocean --digitalocean-access-token "${token}" "${docker_machine_args[@]}" "${name}-${idx}" &
+		pids+=("$!")
+	}
+	wait "${pids[@]}"
+
+	node1="${name}-1"
+	ip="$(docker-machine inspect "${node1}" | jq -crM .Driver.IPAddress)" || return 1
+	docker-machine ssh "${node1}" docker swarm init --advertise-addr "${ip}" || return 1
+
+	joinCommand="$(docker-machine ssh "${node1}" docker swarm join-token worker | grep ' --token ')"
+	for ((idx = 2; idx <= count; idx++)) {
+		docker-machine ssh "${name}-${idx}" "${joinCommand}" || return 1
+	}
+
+	mkdir -p "${swarmEnvDir}"
+	docker-machine env "${name}-1" > "${swarmEnvDir}/${name}"
+
+	return 0
+}
+
+function create() {
+	local provider
+	local swarmFile
+
+	provider="$1"
+	name="$2"
+	shift
+
+	if [ -z "${provider}" ]; then
+		echo "Usage: manage-swarm create <provider> <swarmName> ..." >&2
+
+		return 1
+	fi
+
+	swarmFile="${swarmEnvDir}/${name}"
+
+	if [ -n "${name}" -a -f "${swarmFile}" ]; then
+		echo "Swarm already exists: ${swarmFile}" >&2
+
+		return 1
+	fi
+
+	create_${provider} "$@" || return "$?"
+
+	return 0
+}
+
+function destroy() {
+	local name
+	local swarmFile
+
+	name="$1"
+
+	if [ -z "${name}" ]; then
+		echo "Usage: manage-swarm destroy <swarmName>" >&2
+
+		return 1
+	fi
+
+	swarmFile="${swarmEnvDir}/${name}"
+	if [ ! -f "${swarmFile}" ]; then
+		echo "Swarm does not exist: ${swarmFile}" >&2
+
+		return 1
+	fi
+
+	(
+		. "${swarmFile}"
+		toDelete=( $(
+			docker node ls -q | while IFS='' read -r id; do
+				machine="$(docker node inspect "${id}" | jq -crM '.[0].Description.Hostname')"
+				echo "${machine}"
+			done
+		) )
+
+		retval='0'
+		for machine in "${toDelete[@]}"; do
+			docker-machine rm --force "${machine}" || retval='1'
+		done
+
+		exit "${retval}"
+	) || return 1
+
+	rm -f "${swarmFile}"
+
+	return 0
+}
+
+function status() {
+	local name
+	local swarmFile
+
+	name="$1"
+
+	if [ -z "${name}" ]; then
+		echo "Usage: manage-swarm status <swarmName>" >&2
+
+		return 1
+	fi
+
+	swarmFile="${swarmEnvDir}/${name}"
+	if [ ! -f "${swarmFile}" ]; then
+		echo "Swarm does not exist: ${swarmFile}" >&2
+
+		return 1
+	fi
+
+	(
+		. "${swarmFile}"
+		docker node ls
+		docker stack ls
+	) || return 1
+
+	return 0
+}
+
+function list() {
+	local file
+
+	cd "${swarmEnvDir}" 2>/dev/null || return 0
+	for file in *; do
+		if [ ! -s "${file}" ]; then
+			continue
+		fi
+
+		echo "${file}"
+	done
+
+	return 0
+}
+
+function usage() {
+	echo "Usage: manage-swarm create <provider> <swarmName> ..."
+	echo "       manage-swarm destroy <swarmName>"
+	echo "       manage-swarm status <swarmName>"
+	echo "       manage-swarm list"
+	echo "       manage-swarm help"
+}
+
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
+
+action="$1"
+shift
+
+configDir="$(dirname "${BASH_SOURCE[0]}")/config"
+globalEnvFile="${configDir}/default"
+if [ -f "${globalEnvFile}" ]; then
+	. "${globalEnvFile}"
+fi
+
+swarmEnvDir="${configDir}/swarms"
+
+case "${action}" in
+	create|destroy|status|list)
+		"${action}" "$@"
+		exit "$?"
+		;;
+	ls)
+		list "$@"
+		exit "$?"
+		;;
+	help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac

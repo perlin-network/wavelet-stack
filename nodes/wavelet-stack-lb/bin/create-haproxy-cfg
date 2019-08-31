@@ -4,26 +4,122 @@ configDir="/usr/local/etc/haproxy"
 configFileTemplate="${configDir}/haproxy.cfg.in"
 configFile="${configDir}/haproxy.cfg"
 
+function cachePeers() {
+	local peerData mappingData
+
+	if [ -n "${peersCache}" -a -n "${externalMappingCache}" ]; then
+		return
+	fi
+
+	while true; do
+		peerData="$(curl -sS http://sync:2379/v2/keys/peers)" || peerData=''
+		if [ -n "${peerData}" ]; then
+			break
+		fi
+		sleep 1
+	done
+
+	while true; do
+		mappingData="$(curl -sS http://sync:2379/v2/keys/mapping)" || mappingData=''
+		if [ -n "${mappingData}" ]; then
+			break
+		fi
+		sleep 1
+	done
+
+	peersCache="${peerData}"
+	externalMappingCache="${mappingData}"
+
+	return 0
+}
+
+function uncachePeers() {
+	unset peersCache
+	unset externalMappingCache
+}
+
 function getPeers() {
-	curl -sS http://sync:2379/v2/keys/peers 2>/dev/null | jq -crM '.node.nodes[].value'
+	echo "${peersCache}" | jq -crM '.node.nodes[].key' 2>/dev/null | sed 's@^.*/@@' | sort
 }
 
 function getNode1() {
-	curl -sS http://sync:2379/v2/keys/peers/1 | jq -crM .node.value
+	local value
+
+	value="$(curl -sS http://sync:2379/v2/keys/peers/1 | jq -crM .node.value)"
+	if [ "${value}" = 'null' ]; then
+		value=''
+	fi
+
+	echo "${value}"
+}
+
+function getMappingData() {
+	local peer field
+	local data
+
+	peer="$1"
+	field="$2"
+
+	data="$(echo "${externalMappingCache}" | jq -crM '.node.nodes[] | select(.key == "/mapping/'"${peer}"'") | .value')"
+
+	echo "${data}" | cut -f "${field}" -d /
+}
+
+function getPeerLBPort() {
+	local peer
+	local port
+
+	peer="$1"
+
+	port="$(getMappingData "${peer}" 3)"
+
+	echo "${port}"
+}
+
+function getPeerWaveletAddr() {
+	local peer
+	local data addr
+
+	peer="$1"
+
+	data="$(echo "${peersCache}" | jq -crM '.node.nodes[] | select(.key == "/peers/'"${peer}"'") | .value')"
+
+	echo "${data}" | sed 's@:[^:]*$@@'
+}
+
+function getPeerWaveletPort() {
+	local peer
+	local port
+
+	peer="$1"
+
+	port="$(getMappingData "${peer}" 2)"
+
+	echo "${port}"
 }
 
 function generateHAProxyRPCConfiguration() {
-	local id peer port
-	for peer in $(getPeers); do
-		id="$(echo "${peer}" | sha1sum | cut -c 1-24)"
-		port="$(echo "${peer}" | cut -f 2 -d :)"
+	local id peer waveletAddr waveletPort lbPort
 
-		echo "frontend wavelet-rpc-in-${port}"
-		echo "    bind :::${port} v4v6"
-		echo "    default_backend wavelet-rpc-back-${port}"
+	if [ -f /tmp/wavelet-disable-rpc -o "${WAVELET_NO_RPC}" = 'true' ]; then
+		return 0
+	fi
+
+	for peer in $(getPeers); do
+		waveletAddr="$(getPeerWaveletAddr "${peer}")"
+		waveletPort="$(getPeerWaveletPort "${peer}")"
+		lbPort="$(getPeerLBPort "${peer}")"
+
+		if [ -z "${lbPort}" -o -z "${waveletPort}" -o -z "${waveletAddr}" ]; then
+			continue
+		fi
+
+		echo "frontend wavelet-rpc-front-${peer}"
+		echo "    bind :::${lbPort} v4v6"
+		echo "    default_backend wavelet-rpc-back-${peer}"
 		echo ""
-		echo "backend wavelet-rpc-back-${port}"
-		echo "    server wavelet-rpc-${port} ${peer}"
+		echo "backend wavelet-rpc-back-${peer}"
+		echo "    server wavelet-rpc-${peer} ${waveletAddr}:${waveletPort}"
 		echo ""
 	done
 
@@ -33,7 +129,11 @@ function generateHAProxyRPCConfiguration() {
 function generateHAProxyAPIConfiguration() {
 	local id peer
 
-	echo "frontend wavelet-api-in"
+	if [ -f /tmp/wavelet-disable-api ]; then
+		return 0
+	fi
+
+	echo "frontend wavelet-api-front"
 	echo "    bind :::80 v4v6"
 	echo "    default_backend wavelet-api-back"
 	echo ""
@@ -54,15 +154,12 @@ function generateHAProxyAPIConfiguration() {
 function updateConfig() {
 	local waveletRPCConfig waveletAPIConfig haproxyPids
 
+	uncachePeers
+	cachePeers
+
 	waveletRPCConfig="$(generateHAProxyRPCConfiguration)" || return
-	if [ -z "${waveletRPCConfig}" ]; then
-		return
-	fi
 
 	waveletAPIConfig="$(generateHAProxyAPIConfiguration)" || return
-	if [ -z "${waveletAPIConfig}" ]; then
-		return
-	fi
 
 	awk \
 		-v "waveletRPCConfig=${waveletRPCConfig}" \

@@ -2,7 +2,7 @@
 
 syncURL="http://sync:2379/v2/keys"
 peersURL="${syncURL}/peers"
-walletsURL="${syncURL}/wallets"
+mappingURL="${syncURL}/mapping"
 peerID="${WAVELET_NODE_ID}"
 
 function getKey() {
@@ -61,7 +61,57 @@ function maintainPeerRegistry() {
 
 function getPeers() {
 	curl -SsL "${peersURL}" | \
-		jq -crM '.node.nodes[] | select(.key | contains("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null
+		jq -crM '.node.nodes[] | select(.key | contains("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null | \
+		sort -u | \
+		grep -v '^null$'
+}
+
+function getExternalMappingData() {
+	local data
+
+	while true; do
+		data="$(curl -sSL "${mappingURL}/${peerID}" | jq -crM '.node.value')" 2>/dev/null || data=''
+		if [ "${data}" = 'null' ]; then
+			data=''
+		fi
+
+		if [ -n "${data}" ]; then
+			break
+		fi
+		sleep 0.5
+	done
+
+	externalMappingData="${data}"
+
+	return 0
+}
+
+function getExternalPort() {
+	local port
+
+	if [ "${WAVELET_NO_RPC}" = 'true' ]; then
+		port=$[3000 + $peerID - 1]
+	else
+		getExternalMappingData || return 1
+
+		port="$(echo "${externalMappingData}" | cut -f 2 -d /)"
+	fi
+
+	echo "${port}"
+}
+
+function getExternalIP() {
+	local addr
+
+	if [ "${WAVELET_NO_RPC}" = 'true' ]; then
+		addr="$(getLocalIP)"
+	else
+		getExternalMappingData || return 1
+
+		addr="$(echo "${externalMappingData}" | cut -f 1 -d /)"
+	fi
+
+	echo "${addr}"
 }
 
 function setPeers() {
@@ -84,7 +134,7 @@ function runWavelet() {
 	local argNextArg
 	local needPort
 
-	port=$[${WAVELET_NODE_ID} -1 + 3000]
+	port="$(getExternalPort)"
 	nextArg=''
 	needPort='true'
 	for arg in "$@"; do
@@ -105,7 +155,6 @@ function runWavelet() {
 	fi
 
 	maintainPeerRegistry "${port}"
-	setPeers
 
 	if [ -z "${WAVELET_MEMORY_MAX}" ] || [ "${WAVELET_MEMORY_MAX}" = '0' ]; then
 		unset WAVELET_MEMORY_MAX
@@ -123,9 +172,43 @@ function runWavelet() {
 	fi
 	export WAVELET_WALLET WAVELET_GENESIS
 
-	set | grep '^WAVELET'
+	set | grep '^WAVELET' > /tmp/environment.txt
 
-	exec /wavelet --nat --host "$(getLocalIP)" "$@" "${peers[@]}"
+	# XXX:TODO: Currently if any peers specified on the
+	# command-line are down, consensus breaks.  So we
+	# monitor that set and if it changes, restart Wavelet
+	setPeers
+	while true; do
+		sleep $[30 + ($RANDOM % 30)]
+
+		oldPeers=("${peers[@]}")
+		setPeers
+
+		if [ "${peers[*]}" != "${oldPeers[*]}" ]; then
+			echo "PEERS DIFFER:" >&2
+			echo "  OLD: ${oldPeers[*]}" >&2
+			echo "  NEW: ${peers[*]}" >&2
+			pkill wavelet
+		fi
+	done &
+
+	# Run the wavelet process in a loop so that exiting just
+	# causes it to reload, unless a special marker file
+	# exists
+	retval='1'
+	while true; do
+		if [ -f /tmp/wavelet.exit ]; then
+			break
+		fi
+
+		/wavelet --nat --host "$(getExternalIP)" "$@" "${peers[@]}"
+		retval="$?"
+
+		setPeers
+
+		sleep 0.1
+	done
+	exit "${retval}"
 }
 
 function runBenchmark() {

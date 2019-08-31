@@ -1,0 +1,415 @@
+#! /usr/bin/env bash
+
+stackName='testnet-local'
+swarmName='default'
+
+function stackRunning() {
+	docker stack ps ${stackName} >/dev/null 2>/dev/null
+}
+
+function machinesInSwarm() {
+	docker node ls --format '{{.Hostname}}'
+}
+
+function volumesExist() {
+	local nodeName
+	local retval
+
+	retval='1'
+	for nodeName in $(machinesInSwarm); do
+		(
+			if [ -n "${DOCKER_MACHINE_NAME}" ]; then
+				eval "$(docker-machine env "${nodeName}")" || exit 1
+			fi
+
+			docker volume list -q | grep "^${stackName}_wavelet_wavelet_db_instance_" >/dev/null
+		) && retval='0'
+	done
+
+	return "${retval}"
+}
+
+function benchmarkRunning() {
+	local replicas
+
+	replicas="$(docker service inspect "${stackName}_benchmark" | jq '.[].Spec.Mode.Replicated.Replicas')"
+	if [ "${replicas}" = '0' ]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
+function managerAddress() {
+	local managerNode managerAddr
+
+	managerNode="$(docker node ls -q --filter role=manager | sort -R | head -n 1)"
+	managerAddr="$(docker node inspect "${managerNode}" | jq -crM '.[0].Status.Addr')"
+
+	echo "${managerAddr}"
+}
+
+function getExternalPort() {
+	local internalPort
+	local externalPort
+
+	internalPort="$1"
+
+	if [ -z "${serviceConfig_cache}" ]; then
+		serviceConfig_cache="$(docker service inspect "${stackName}_loadbalancer")"
+	fi
+
+	externalPort="$(echo "${serviceConfig_cache}" | jq -crM '.[0].Endpoint.Ports[] | select(.TargetPort == '"${internalPort}"') | .PublishedPort')"
+
+	echo "${externalPort}"
+}
+
+function pushConfigToEtcd() {
+	local managerAddr
+	local taskID containerID
+	local apiPort rpcPortExternal rpcPortInternal nodeID
+
+	(
+		for try in {1..120}; do
+			taskID="$(taskIDFromNodeID 'sync')" || taskID=''
+			if [ -n "${taskID}" ]; then
+				break
+			fi
+
+			sleep 0.5
+		done
+
+		containerID="$(containerIDFromTaskID "${taskID}")" || exit 1
+
+		# Call and discard the result to cache the service config
+		getExternalPort -1 >/dev/null 2>/dev/null
+
+		managerAddr="$(managerAddress)"
+		for ((rpcPortInternal = 3000; rpcPortInternal <= 4000; rpcPortInternal++)) {
+			rpcPortExternal="$(getExternalPort "${rpcPortInternal}")"
+			if [ -z "${rpcPortExternal}" ]; then
+				break
+			fi
+
+			nodeID=$[${rpcPortInternal} - 3000 + 1]
+
+			#echo "${managerAddr}:${rpcPortExternal} -> lb:${rpcPortInternal} -> ${nodeID}/${rpcPortExternal}" >&2
+			echo "curl -s -X PUT --data value='${managerAddr}/${rpcPortExternal}/${rpcPortInternal}'  'http://localhost:2379/v2/keys/mapping/${nodeID}' >/dev/null 2>/dev/null </dev/null;"
+		} | (
+			setDockerMachineForTaskID "${taskID}" </dev/null
+			docker exec "${containerID}" sh -c 'apk update; apk add curl' </dev/null >/dev/null 2>/dev/null
+			docker exec -i "${containerID}" sh -
+		)
+	) || return 1
+
+	return 0
+}
+
+function cleanVolumes() {
+	if [ "$1" = '--force' ]; then
+		WAVELET_CLEAN_VOLUMES='yes'
+	fi
+
+	if [ "${WAVELET_CLEAN_VOLUMES}" = 'yes' ]; then
+		while volumesExist; do
+			for nodeName in $(machinesInSwarm); do
+				(
+					if [ -n "${DOCKER_MACHINE_NAME}" ]; then
+						eval "$(docker-machine env "${nodeName}")" || exit 1
+					fi
+
+					volumes=( $(docker volume list -q | grep "^${stackName}_wavelet_wavelet_db_instance_") )
+
+					for volume in "${volumes[@]}"; do
+						docker volume rm --force "${volume}"
+					done
+				)
+			done
+
+			sleep 0.5
+		done
+	fi
+}
+
+function stop() {
+	while stackRunning; do
+		docker stack rm ${stackName}
+		sleep 0.5
+	done
+
+	cleanVolumes
+}
+
+function start() {
+	local configFile
+	local tmp
+	local toDelete
+
+	configFile='./docker-compose.yml'
+	toDelete=()
+
+	case "${WAVELET_NO_RPC}" in
+		y|Y|yes|true|1) 
+			WAVELET_NO_RPC='true'
+
+			tmp="$(mktemp)" || exit 1
+			toDelete+=("${tmp}")
+
+			grep -v ' "3000-' "${configFile}" > "${tmp}"
+
+			configFile="${tmp}"
+			;;
+	esac
+
+	docker stack deploy --with-registry-auth -c "${configFile}" "${stackName}"
+	pushConfigToEtcd
+
+	if [ "${#toDelete[@]}" != '0' ]; then
+		rm -f "${toDelete[@]}"
+	fi
+}
+
+function status() {
+	local running
+	local managerAddr
+	local apiPort rpcPortStart
+
+	echo "${stackName} (on ${swarmName}):"
+
+	if stackRunning; then
+		running='true'
+
+		if benchmarkRunning; then
+			echo '  - RUNNING BENCHMARKING'
+		else
+			echo '  - RUNNING'
+		fi
+	else
+		running='false'
+
+		echo '  - NOT RUNNING'
+	fi
+
+	if volumesExist; then
+		echo '  - VOLUMES'
+	else
+		echo '  - NO VOLUMES'
+	fi
+
+	if [ "${running}" != 'true' ]; then
+		return 0
+	fi
+
+	managerAddr="$(managerAddress)"
+	apiPort="$(getExternalPort 80)"
+	rpcPortStart="$(getExternalPort 3000)"
+
+	echo "  - API: http://${managerAddr}:${apiPort}/"
+
+	if [ -n "${rpcPortStart}" ]; then
+		echo "  - RPC: ${managerAddr}:${rpcPortStart}"
+	else
+		echo "  - RPC: disabled"
+	fi
+
+	echo '----'
+	docker stack ps "${stackName}"
+
+	return 0
+}
+
+function setDockerMachineForTaskID() {
+	local taskID
+	local nodeID nodeName
+
+	taskID="$1"
+
+	if [ -n "${DOCKER_MACHINE_NAME}" ]; then
+		nodeID="$(docker inspect "${taskID}" | jq -crM '.[0].NodeID')"
+		nodeName="$(docker node ls --filter ID="${nodeID}" --format '{{.Hostname}}')"
+		eval "$(docker-machine env "${nodeName}")" || return 1
+	fi
+
+	return 0
+}
+
+function containerIDFromTaskID() {
+	local taskID containerID
+
+	taskID="$1"
+
+	containerID="$(docker inspect "${taskID}" | jq -crM '.[0].Status.ContainerStatus.ContainerID')" || return 1
+	if [ "${containerID}" = 'null' ]; then
+		return 1
+	fi
+
+	echo "${containerID}"
+
+	return 0
+}
+
+function taskIDFromNodeID() {
+	local nodeID taskName taskID
+
+	nodeID="$1"
+	if [ -z "${nodeID}" ]; then
+		echo "ID Required" >&2
+		usage >&2
+		return 1
+	fi
+
+	if [ "${nodeID}" = 'benchmark' ]; then
+		taskName="${stackName}_benchmark.1"
+	elif [ "${nodeID}" = 'loadbalancer' ]; then
+		taskName="${stackName}_loadbalancer.1"
+	elif [ "${nodeID}" = 'sync' ]; then
+		taskName="${stackName}_sync.1"
+	else
+		taskName="${stackName}_wavelet.${nodeID}"
+	fi
+
+	taskID="$(docker stack ps -q -f NAME="${taskName}" "${stackName}" | head -n 1)" || return 1
+	if [ "${taskID}" = 'null' ]; then
+		return 1
+	fi
+
+	echo "${taskID}"
+}
+
+function attach() {
+	local nodeID taskID containerID
+
+	nodeID="$1"
+	taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
+	containerID="$(containerIDFromTaskID "${taskID}")" || return 1
+	setDockerMachineForTaskID "${taskID}"
+
+	docker attach --sig-proxy=false "${containerID}"
+}
+
+function shell() {
+	local nodeID taskID containerID
+	local args
+
+	nodeID="$1"
+	shift
+
+	taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
+	containerID="$(containerIDFromTaskID "${taskID}")" || return 1
+	setDockerMachineForTaskID "${taskID}"
+
+	args=()
+	if [ "$#" = '0' ]; then
+		if [ "${nodeID}" = 'sync' ]; then
+			set -- sh
+		else
+			set -- bash
+		fi
+		args+=(-t)
+	fi
+
+	docker exec -i "${args[@]}" "${containerID}" "$@"
+}
+
+function logs() {
+	local nodeID taskID containerID
+
+	nodeID="$1"
+	shift
+
+	taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
+	containerID="$(containerIDFromTaskID "${taskID}")" || return 1
+	setDockerMachineForTaskID "${taskID}"
+
+	docker logs "$@" "${containerID}"
+}
+
+function usage() {
+	echo "Usage: manage [-s <stackName>] {stop|start|update|restart|status}"
+	echo "       manage [-s <stackName>] {benchmark|nobenchmark}"
+	echo "       manage [-s <stackName>] {attach|shell|logs} <nodeId>"
+}
+
+function benchmark() {
+	docker service scale "${stackName}_benchmark=1" || return 1
+	attach benchmark
+}
+
+function nobenchmark() {
+	docker service scale "${stackName}_benchmark=0"
+}
+
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
+
+setStackName=''
+while getopts 's:' arg; do
+	case "${arg}" in
+		s)
+			setStackName="${OPTARG}"
+			;;
+		':'|'?')
+			usage >&2
+			exit 1
+			;;
+	esac
+done
+shift $[${OPTIND} - 1]
+
+action="$1"
+shift
+
+configDir="$(dirname "${BASH_SOURCE[0]}")/config"
+globalEnvFile="${configDir}/default"
+if [ -f "${globalEnvFile}" ]; then
+	. "${globalEnvFile}"
+fi
+
+# Use the user-specified (on CLI) stack name over all config provided ones
+if [ -n "${setStackName}" ]; then
+	stackName="${setStackName}"
+fi
+
+stackEnvFile="${configDir}/stacks/${stackName}"
+if [ -f "${stackEnvFile}" ]; then
+	. "${stackEnvFile}"
+fi
+
+swarmEnvFile="${configDir}/swarms/${swarmName}"
+if [ -f "${swarmEnvFile}" ]; then
+	. "${swarmEnvFile}"
+fi
+export REGISTRY WAVELET_BENCHMARK_NODES WAVELET_GENESIS WAVELET_KEYS WAVELET_NODES WAVELET_RICH_WALLETS
+export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA WAVELET_MEMORY_MAX WAVELET_NO_RPC
+
+
+case "${action}" in
+	stop)
+		stop
+		exit "$?"
+		;;
+	start|update)
+		start
+		exit "$?"
+		;;
+	restart)
+		stop || exit "$?"
+		start
+		exit "$?"
+		;;
+	status|'')
+		status
+		exit "$?"
+		;;
+	attach|shell|logs|benchmark|nobenchmark|cleanVolumes)
+		"${action}" "$@"
+		exit "$?"
+		;;
+	help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac
