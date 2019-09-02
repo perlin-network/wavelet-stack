@@ -60,7 +60,7 @@ function maintainPeerRegistry() {
 }
 
 function getPeers() {
-	curl -SsL "${peersURL}" | \
+	curl -SsL "${peersURL}" 2>/dev/null | \
 		jq -crM '.node.nodes[] | select(.key | contains("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null | \
 		sort -u | \
 		grep -v '^null$'
@@ -70,7 +70,7 @@ function getExternalMappingData() {
 	local data
 
 	while true; do
-		data="$(curl -sSL "${mappingURL}/${peerID}" | jq -crM '.node.value')" 2>/dev/null || data=''
+		data="$(curl -sSL "${mappingURL}/${peerID}" 2>/dev/null | jq -crM '.node.value')" 2>/dev/null || data=''
 		if [ "${data}" = 'null' ]; then
 			data=''
 		fi
