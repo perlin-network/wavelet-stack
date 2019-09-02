@@ -106,7 +106,7 @@ function pushConfigToEtcd() {
 			setDockerMachineForTaskID "${taskID}" </dev/null
 			docker exec "${containerID}" sh -c "$(cat << \_EOF_
 				while ! curl http://localhost:2379/v2/keys >/dev/null 2>/dev/null; do
-					apk update && apk add curl
+					( apk update && apk add curl ) >/dev/null 2>/dev/null
 					sleep 0.5
 				done
 _EOF_
