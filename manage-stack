@@ -324,10 +324,8 @@ function logs() {
 	shift
 
 	taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
-	containerID="$(containerIDFromTaskID "${taskID}")" || return 1
-	setDockerMachineForTaskID "${taskID}"
 
-	docker logs "$@" "${containerID}"
+	docker service logs "$@" "${taskID}"
 }
 
 function usage() {
