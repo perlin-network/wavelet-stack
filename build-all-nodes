@@ -1,0 +1,14 @@
+#! /usr/bin/env bash
+
+set -e
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+cd nodes
+for dir in */; do
+	(
+		set -e
+
+		cd "${dir}"
+		./build.sh
+	)
+done
