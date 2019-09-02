@@ -253,7 +253,7 @@ function exportConfigToSwarm() {
 
 function importConfigFromSwarm() {
 	local ip
-	local swarmFile
+	local swarmFile swarmName
 	local tmpdir
 	local retval
 
@@ -292,6 +292,13 @@ function importConfigFromSwarm() {
 		done
 	)
 	retval="$?"
+
+	if [ "${retval}" = '0' ]; then
+		swarmName="$(cd "${tmpdir}" && echo *-1 | sed 's@-1$@@')"
+		swarmFile="${swarmEnvDir}/${swarmName}"
+
+		docker-machine env "${swarmName}-1" > "${swarmFile}"
+	fi
 
 	rm -rf "${tmpdir}"
 
