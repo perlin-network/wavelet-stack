@@ -345,7 +345,7 @@ function logs() {
 }
 
 function usage() {
-	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}"
+	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status|config}"
 	echo "       manage-stack [-s <stackName>] {benchmark|nobenchmark}"
 	echo "       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>"
 }
@@ -398,9 +398,15 @@ swarmEnvFile="${configDir}/swarms/${swarmName}"
 if [ -f "${swarmEnvFile}" ]; then
 	. "${swarmEnvFile}"
 fi
+
+if [ -n "${DOCKER_MACHINE_NAME}" ]; then
+	eval "$(docker-machine ssh "${DOCKER_MACHINE_NAME}" "cat '/etc/wavelet-stack/${stackName}' 2>/dev/null; exit 0")" || (
+		echo "Unable to login to docker machine host" >&2
+		exit 1
+	) || exit 1
+fi
 export REGISTRY WAVELET_BENCHMARK_NODES WAVELET_GENESIS WAVELET_KEYS WAVELET_NODES WAVELET_RICH_WALLETS
 export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA WAVELET_MEMORY_MAX WAVELET_NO_RPC
-
 
 case "${action}" in
 	stop)
@@ -426,6 +432,9 @@ case "${action}" in
 	attach|shell|logs|benchmark|nobenchmark|cleanVolumes)
 		"${action}" "$@"
 		exit "$?"
+		;;
+	config)
+		set | grep '^WAVELET_'
 		;;
 	help)
 		usage
