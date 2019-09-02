@@ -404,6 +404,9 @@ case "${action}" in
 		;;
 	restart)
 		stop || exit "$?"
+		if [ "$1" = '--hard' ]; then
+			cleanVolumes --force || exit "$?"
+		fi
 		start
 		exit "$?"
 		;;
