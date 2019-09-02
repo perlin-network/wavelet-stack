@@ -98,6 +98,12 @@ function pushConfigToEtcd() {
 		} | (
 			setDockerMachineForTaskID "${taskID}" </dev/null
 			docker exec "${containerID}" sh -c 'apk update; apk add curl' </dev/null >/dev/null 2>/dev/null
+			docker exec "${containerID}" sh -c "$(cat << \_EOF_
+				while ! curl http://localhost:2379/v2/keys >/dev/null 2>/dev/null; do
+					sleep 0.5
+				done
+_EOF_
+)"
 			docker exec -i "${containerID}" sh -
 		)
 	) || return 1
