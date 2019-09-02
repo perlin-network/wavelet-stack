@@ -92,6 +92,8 @@ function create() {
 
 	create_${provider} "$@" || return "$?"
 
+	exportConfigToSwarm "${name}"
+
 	return 0
 }
 
