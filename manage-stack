@@ -1,5 +1,17 @@
 #! /usr/bin/env bash
 
+if [ ! -x "$(command -v docker-machine)" ]; then
+	echo "\"docker-machine\" is required, but missing" >&2
+
+	exit 1
+fi
+
+if [ ! -x "$(command -v docker)" ]; then
+	echo "\"docker\" is required, but missing" >&2
+
+	exit 1
+fi
+
 stackName=''
 swarmName=''
 
