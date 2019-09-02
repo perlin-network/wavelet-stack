@@ -60,28 +60,61 @@ function maintainPeerRegistry() {
 }
 
 function getPeers() {
-	curl -SsL "${peersURL}" 2>/dev/null | \
-		jq -crM '.node.nodes[] | select(.key | contains("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null | \
-		sort -u | \
-		grep -v '^null$'
+	local peerIDs
+	local peer
+
+	if [ "${WAVELET_NO_RPC}" = 'true' ]; then
+		curl -SsL "${peersURL}" 2>/dev/null | \
+			jq -crM '.node.nodes[] | select(.key | contains("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null | \
+			sort -u | \
+			grep -v '^null$'
+	else
+		peerIDs=( $(curl -sSL "${peersURL}" 2>/dev/null | jq -crM '.node.nodes[].key' | sed 's@^.*/@@') )
+		for peer in "${peerIDs[@]}"; do
+			if [ "${peer}" = "${peerID}" ]; then
+				continue
+			fi
+
+			getExternalMappingData "${peer}" | cut -f 1-2 -d / | sed 's@/@:@g'
+		done | sort -u
+	fi
 }
 
-function getExternalMappingData() {
+function cacheExternalMappingData() {
 	local data
-
 	while true; do
-		data="$(curl -sSL "${mappingURL}/${peerID}" 2>/dev/null | jq -crM '.node.value')" 2>/dev/null || data=''
+		data="$(curl -sSL "${mappingURL}" 2>/dev/null | jq -crM '.node')"
 		if [ "${data}" = 'null' ]; then
 			data=''
 		fi
 
 		if [ -n "${data}" ]; then
+			externalMappingDataCache="${data}"
 			break
 		fi
+
 		sleep 0.5
 	done
+}
 
-	externalMappingData="${data}"
+function uncacheExternalMappingData() {
+	unset externalMappingDataCache
+}
+
+function getExternalMappingData() {
+	local peer
+	local data
+
+	peer="$1"
+	if [ -z "${peer}" ]; then
+		peer="${peerID}"
+	fi
+
+	cacheExternalMappingData
+
+	data="$(echo "${externalMappingDataCache}" | jq -crM '.nodes[] | select (.key == "/mapping/'"${peer}"'") | .value')"
+
+	echo "${data}"
 
 	return 0
 }
@@ -92,9 +125,13 @@ function getExternalPort() {
 	if [ "${WAVELET_NO_RPC}" = 'true' ]; then
 		port=$[3000 + $peerID - 1]
 	else
-		getExternalMappingData || return 1
+		cacheExternalMappingData
 
-		port="$(echo "${externalMappingData}" | cut -f 2 -d /)"
+		port="$(getExternalMappingData | cut -f 2 -d /)"
+	fi
+
+	if [ -z "${port}" ]; then
+		return 1
 	fi
 
 	echo "${port}"
@@ -106,9 +143,13 @@ function getExternalIP() {
 	if [ "${WAVELET_NO_RPC}" = 'true' ]; then
 		addr="$(getLocalIP)"
 	else
-		getExternalMappingData || return 1
+		cacheExternalMappingData
 
-		addr="$(echo "${externalMappingData}" | cut -f 1 -d /)"
+		addr="$(getExternalMappingData | cut -f 1 -d /)"
+	fi
+
+	if [ -z "${addr}" ]; then
+		return 1
 	fi
 
 	echo "${addr}"
