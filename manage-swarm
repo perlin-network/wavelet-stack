@@ -179,8 +179,126 @@ function list() {
 	return 0
 }
 
+function exportConfigToSwarm() {
+	local name
+	local swarmFile
+	local tmpdir
+	local retval
+
+	name="$1"
+
+	if [ -z "${name}" ]; then
+		echo "Usage: exportConfigToSwarm <swarmName>" >&2
+
+		return 1
+	fi
+
+	swarmFile="${swarmEnvDir}/${name}"
+	if [ ! -f "${swarmFile}" ]; then
+		echo "Swarm does not exist: ${swarmFile}" >&2
+
+		return 1
+	fi
+
+	tmpdir="$(mktemp -d)" || return 1
+	tarfile="$(mktemp)" || return 1
+
+	(
+		. "${swarmFile}"
+
+		dockerMachineBaseDir="${HOME}/.docker/machine/machines"
+		docker node ls --format '{{.Hostname}}' | while IFS='' read -r hostname; do
+			dockerMachineDir="${dockerMachineBaseDir}/${hostname}"
+			configDir="${tmpdir}/${hostname}"
+
+			cp -rp "${dockerMachineDir}" "${configDir}"
+			cp "${dockerMachineBaseDir}/../certs/key.pem" "${configDir}/key.pem"
+			cp "${dockerMachineBaseDir}/../certs/cert.pem" "${configDir}/cert.pem"
+			cp "${dockerMachineBaseDir}/../certs/ca.pem" "${configDir}/ca.pem"
+			cp "${dockerMachineBaseDir}/../certs/ca-key.pem" "${configDir}/ca-key.pem"
+
+			cat "${configDir}/config.json" | sed '
+				s|"/.*/\.docker/machine/machines/'"${hostname}"'\(/*\)|"@DOCKER_MACHINE_DIR@\1|g
+				s|"/.*/\.docker/machine/certs/key\.pem"|"@DOCKER_MACHINE_DIR@/key.pem"|g
+				s|"/.*/\.docker/machine/certs/cert\.pem"|"@DOCKER_MACHINE_DIR@/cert.pem"|g
+				s|"/.*/\.docker/machine/certs/ca\.pem"|"@DOCKER_MACHINE_DIR@/ca.pem"|g
+				s|"/.*/\.docker/machine/certs/ca-key\.pem"|"@DOCKER_MACHINE_DIR@/ca-key.pem"|g
+				s|"/.*/\.docker/machine/certs"|"@DOCKER_MACHINE_DIR@"|g
+				s|"/.*/\.docker/machine"|"@DOCKER_MACHINE_DIR@/../.."|g
+			' > "${configDir}/config.json.in"
+			rm -f "${configDir}/config.json"
+		done
+
+		(
+			set -e
+
+			cd "${tmpdir}"
+			tar -cf - * | gzip -9c > "${tarfile}"
+			gzip -dc "${tarfile}" | tar -tf - >/dev/null
+		) || exit 1
+
+		docker node ls --format '{{.Hostname}}' | while IFS='' read -r hostname; do
+			docker-machine scp "${tarfile}" "${hostname}:/etc/wavelet-swarm.tar.gz" </dev/null
+		done
+	)
+	retval="$?"
+
+	rm -rf "${tmpdir}"
+	rm -f "${tarfile}"
+
+	return "${retval}"
+}
+
+function importConfigFromSwarm() {
+	local ip
+	local swarmFile
+	local tmpdir
+	local retval
+
+	ip="$1"
+
+	if [ -z "${ip}" ]; then
+		echo "Usage: importConfigFromSwarm <ip>" >&2
+
+		return 1
+	fi
+
+	tmpdir="$(mktemp -d)" || return 1
+
+	(
+		set -e
+
+		dockerMachineBaseDir="${HOME}/.docker/machine/machines"
+		mkdir -p "${dockerMachineBaseDir}"
+
+		cd "${tmpdir}"
+
+		scp "root@${ip}:/etc/wavelet-swarm.tar.gz" wavelet-swarm.tar.gz
+
+		gzip -dc wavelet-swarm.tar.gz | tar -xf - >/dev/null
+		rm -f wavelet-swarm.tar.gz
+
+		for hostname in *; do
+			dockerMachineDir="${dockerMachineBaseDir}/${hostname}"
+			if [ -d "${dockerMachineDir}" ]; then
+				continue
+			fi
+
+			cp -rp "${hostname}" "${dockerMachineDir}/"
+			sed "s|@DOCKER_MACHINE_DIR@|${dockerMachineDir}|g" "${dockerMachineDir}/config.json.in" > "${dockerMachineDir}/config.json"
+			rm -f "${dockerMachineDir}/config.json.in"
+		done
+	)
+	retval="$?"
+
+	rm -rf "${tmpdir}"
+
+	return "${retval}"
+}
+
 function usage() {
 	echo "Usage: manage-swarm create <provider> <swarmName> ..."
+	echo "       manage-swarm import <swarmName> <ip>"
 	echo "       manage-swarm destroy <swarmName>"
 	echo "       manage-swarm status <swarmName>"
 	echo "       manage-swarm list"
@@ -201,7 +319,7 @@ fi
 swarmEnvDir="${configDir}/swarms"
 
 case "${action}" in
-	create|destroy|status|list)
+	create|destroy|status|list|exportConfigToSwarm|importConfigFromSwarm)
 		"${action}" "$@"
 		exit "$?"
 		;;
