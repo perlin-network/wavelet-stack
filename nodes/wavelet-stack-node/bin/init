@@ -242,7 +242,7 @@ function runWavelet() {
 			break
 		fi
 
-		/wavelet --nat --host "$(getExternalIP)" "$@" "${peers[@]}"
+		/wavelet --host "$(getExternalIP)" "$@" "${peers[@]}"
 		retval="$?"
 
 		setPeers
