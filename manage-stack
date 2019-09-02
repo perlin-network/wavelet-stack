@@ -79,7 +79,14 @@ function pushConfigToEtcd() {
 			sleep 0.5
 		done
 
-		containerID="$(containerIDFromTaskID "${taskID}")" || exit 1
+		for try in {1..120}; do
+			containerID="$(containerIDFromTaskID "${taskID}")"
+
+			if [ -n "${containerID}" ]; then
+				break
+			fi
+			sleep 0.5
+		done
 
 		# Call and discard the result to cache the service config
 		getExternalPort -1 >/dev/null 2>/dev/null
@@ -97,9 +104,9 @@ function pushConfigToEtcd() {
 			echo "curl -s -X PUT --data value='${managerAddr}/${rpcPortExternal}/${rpcPortInternal}'  'http://localhost:2379/v2/keys/mapping/${nodeID}' >/dev/null 2>/dev/null </dev/null;"
 		} | (
 			setDockerMachineForTaskID "${taskID}" </dev/null
-			docker exec "${containerID}" sh -c 'apk update; apk add curl' </dev/null >/dev/null 2>/dev/null
 			docker exec "${containerID}" sh -c "$(cat << \_EOF_
 				while ! curl http://localhost:2379/v2/keys >/dev/null 2>/dev/null; do
+					apk update && apk add curl
 					sleep 0.5
 				done
 _EOF_
