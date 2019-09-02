@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 
-stackName='testnet-local'
-swarmName='default'
+stackName=''
+swarmName=''
 
 function stackRunning() {
 	docker stack ps ${stackName} >/dev/null 2>/dev/null
@@ -387,6 +387,18 @@ fi
 # Use the user-specified (on CLI) stack name over all config provided ones
 if [ -n "${setStackName}" ]; then
 	stackName="${setStackName}"
+fi
+
+# Compute the swarm name if none is provided
+if [ -n "${stackName}" ]; then
+	if [ -z "${swarmName}" ]; then
+		swarmName="$(echo "${stackName}" | sed 's@-[^-]*$@@')"
+	fi
+else
+	stackName="default-local"
+fi
+if [ -z "${swarmName}" ]; then
+	swarmName='default'
 fi
 
 stackEnvFile="${configDir}/stacks/${stackName}"
