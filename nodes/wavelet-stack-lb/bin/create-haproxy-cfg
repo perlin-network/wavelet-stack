@@ -119,7 +119,7 @@ function generateHAProxyRPCConfiguration() {
 		echo "    default_backend wavelet-rpc-back-${peer}"
 		echo ""
 		echo "backend wavelet-rpc-back-${peer}"
-		echo "    server wavelet-rpc-${peer} ${waveletAddr}:${waveletPort}"
+		echo "    server wavelet-rpc-${peer} ${waveletAddr}:${waveletPort} check"
 		echo ""
 	done
 
