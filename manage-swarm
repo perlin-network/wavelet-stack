@@ -263,7 +263,7 @@ function exportConfigToSwarm() {
 	return "${retval}"
 }
 
-function importConfigFromSwarm() {
+function import() {
 	local ip
 	local swarmFile swarmName
 	local tmpdir
@@ -272,7 +272,7 @@ function importConfigFromSwarm() {
 	ip="$1"
 
 	if [ -z "${ip}" ]; then
-		echo "Usage: importConfigFromSwarm <ip>" >&2
+		echo "Usage: manage-swarm import <ip>" >&2
 
 		return 1
 	fi
@@ -319,7 +319,7 @@ function importConfigFromSwarm() {
 
 function usage() {
 	echo "Usage: manage-swarm create <provider> <swarmName> ..."
-	echo "       manage-swarm import <swarmName> <ip>"
+	echo "       manage-swarm import <ip>"
 	echo "       manage-swarm destroy <swarmName>"
 	echo "       manage-swarm status <swarmName>"
 	echo "       manage-swarm list"
@@ -340,7 +340,7 @@ fi
 swarmEnvDir="${configDir}/swarms"
 
 case "${action}" in
-	create|destroy|status|list|exportConfigToSwarm|importConfigFromSwarm)
+	create|destroy|status|list|import|exportConfigToSwarm)
 		"${action}" "$@"
 		exit "$?"
 		;;
