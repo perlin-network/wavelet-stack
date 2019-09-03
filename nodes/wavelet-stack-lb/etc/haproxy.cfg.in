@@ -7,7 +7,7 @@ defaults
     timeout connect 5s
     timeout client 50s
     timeout server 50s
-    timeout tunnel 50s
+    timeout tunnel 86400s
     option  http-server-close
     log     global
 
