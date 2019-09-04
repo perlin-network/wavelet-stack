@@ -12,7 +12,7 @@ services:
                         - "9000-9047"
                         - "3000-3047"
         wavelet:
-                image: "${REGISTRY-localhost:5000}/wavelet-stack-node"
+                image: "${REGISTRY-localhost:5000}/wavelet-stack-node:${WAVELET_TAG-latest}"
                 command: "wavelet --api.port 9000 --db /db"
                 stdin_open: true
                 environment:
