@@ -3,6 +3,14 @@
 set -e
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+
+if [ -n "$1" ]; then
+	stackName="$1"
+
+	eval "$(./manage-stack -s "${stackName}" config)"
+	export REGISTRY
+fi
+
 cd nodes
 for dir in */; do
 	(
