@@ -392,6 +392,10 @@ function editConfig() {
 	if [ -f "${tmpfile}" ]; then
 		if [ -n "${DOCKER_MACHINE_NAME}" ]; then
 			docker-machine scp "${tmpfile}" "${swarmName}-1:/etc/wavelet-stack/${stackName}"
+
+			if [ -f "${stackEnvFile}" ]; then
+				mv "${stackEnvFile}" "${stackEnvFile}.old" 2>/dev/null
+			fi
 		else
 			mkdir -p "$(dirname "${stackEnvFile}")"
 			cp "${tmpfile}" "${stackEnvFile}"
