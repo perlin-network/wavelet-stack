@@ -34,7 +34,7 @@ function volumesExist() {
 				eval "$(docker-machine env "${nodeName}")" || exit 1
 			fi
 
-			docker volume list -q | grep "^${stackName}_wavelet_wavelet_db_instance_" >/dev/null
+			docker volume list -q | egrep "^${stackName}_(wavelet|sync)_wavelet_db_instance_" >/dev/null
 		) && retval='0'
 	done
 
@@ -143,7 +143,7 @@ function cleanVolumes() {
 						eval "$(docker-machine env "${nodeName}")" || exit 1
 					fi
 
-					volumes=( $(docker volume list -q | grep "^${stackName}_wavelet_wavelet_db_instance_") )
+					volumes=( $(docker volume list -q | egrep "^${stackName}_(wavelet|sync)_wavelet_db_instance_") )
 
 					for volume in "${volumes[@]}"; do
 						docker volume rm --force "${volume}"

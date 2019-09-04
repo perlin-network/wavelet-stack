@@ -3,6 +3,8 @@ services:
         sync:
                 image: "elcolio/etcd:latest"
                 command: "-name wavelet"
+                volumes:
+                        - wavelet_db:/data
         loadbalancer:
                 image: "${REGISTRY-localhost:5000}/wavelet-stack-lb"
                 ports:
