@@ -309,6 +309,7 @@ function import() {
 		swarmName="$(cd "${tmpdir}" && echo *-1 | sed 's@-1$@@')"
 		swarmFile="${swarmEnvDir}/${swarmName}"
 
+		mkdir -p "${swarmEnvDir}"
 		docker-machine env "${swarmName}-1" > "${swarmFile}"
 	fi
 
