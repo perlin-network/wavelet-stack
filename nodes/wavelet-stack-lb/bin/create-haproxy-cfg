@@ -63,7 +63,7 @@ function getMappingData() {
 	peer="$1"
 	field="$2"
 
-	data="$(echo "${externalMappingCache}" | jq -crM '.node.nodes[] | select(.key == "/mapping/'"${peer}"'") | .value')"
+	data="$(echo "${externalMappingCache}" | jq -crM '.node.nodes[] | select(.key == "/mapping/'"${peer}"'") | .value' 2>/dev/null)"
 
 	echo "${data}" | cut -f "${field}" -d /
 }
