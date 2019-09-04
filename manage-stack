@@ -16,7 +16,7 @@ stackName=''
 swarmName=''
 
 function stackRunning() {
-	docker stack ps ${stackName} >/dev/null 2>/dev/null
+	docker stack ps "${stackName}" >/dev/null 2>/dev/null
 }
 
 function machinesInSwarm() {
@@ -383,6 +383,7 @@ function usage() {
 	echo "       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>"
 	echo "       manage-stack [-s <stackName>] {config|edit-config}"
 	echo "       manage-stack [-s <stackName>] dump-db <nodeId> <outputFile>"
+	echo "       manage-stack [-s <stackName>] duplicate-stack <newStackName>"
 }
 
 function benchmark() {
@@ -476,6 +477,78 @@ _EOF_
 
 	return "${retval}"
 }
+
+function callSelf() {
+	(
+		unset $(export | sed 's@=.*$@@;s@^.* @@')
+		eval "${startupEnvironment}"
+
+		./manage-stack "$@"
+		exit "$?"
+	)
+}
+
+function duplicateStack() {
+	local destStackName
+	local newStackEnvFile
+	local tmpDBFile
+	local retval
+
+	destStackName="$1"
+
+	if [ -z "${destStackName}" ]; then
+		echo "Usage: manage-stack [-s <stackName>] duplicate-stack <newStackName>" >&2
+
+		return 1
+	fi
+
+	if callSelf -s "${destStackName}" status 2>/dev/null | grep '^ *- *RUNNING$' >/dev/null; then
+		echo "ERROR: Destination stack (${destStackName}) already exists and is running" >&2
+
+		return 1
+	fi
+
+	newStackEnvFile="${configDir}/stacks/${destStackName}"
+
+	if [ -f "${newStackEnvFile}" ]; then
+		echo "ERROR: Destination stack (${destStackName}) already has a configuration" >&2
+
+		return 1
+	fi
+
+	mkdir -p "$(dirname "${newStackEnvFile}")"
+	dumpConfig > "${newStackEnvFile}"
+
+	retval='0'
+
+	tmpDBFile="$(mktemp)"
+	dumpDB 1 "${tmpDBFile}" || retval='1'
+
+	if [ "${retval}" = '0' ]; then
+		# Create the stack with exactly 1 node to start, so we can replace the DB
+		echo 'WAVELET_NODES=1; # 16441c8f643a0fb87ffb1a5588f32559f62a52de' >> "${newStackEnvFile}"
+
+		callSelf -s "${destStackName}" start || retval='1'
+
+		grep -v '16441c8f643a0fb87ffb1a5588f32559f62a52de' "${newStackEnvFile}" > "${newStackEnvFile}.new"
+		cat "${newStackEnvFile}.new" > "${newStackEnvFile}"
+		rm -f "${newStackEnvFile}.new"
+	fi
+
+	if [ "${retval}" = '0' ]; then
+		cat "${tmpDBFile}" | callSelf -s "${destStackName}" shell 1 sh -c 'cd /db && rm -f * && gzip -dc | tar -xf - && ( pkill -9 wavelet || true )' || retval='1'
+	fi
+
+	if [ "${retval}" = '0' ]; then
+		callSelf -s "${destStackName}" update
+	fi
+
+	rm -f "${tmpDBFile}"
+
+	return "${retval}"
+}
+
+startupEnvironment="$(export)"
 
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
@@ -573,6 +646,10 @@ case "${action}" in
 		;;
 	dump-db)
 		dumpDB "$@"
+		exit "$?"
+		;;
+	duplicate-stack)
+		duplicateStack "$@"
 		exit "$?"
 		;;
 	help)
