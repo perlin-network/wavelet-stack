@@ -458,7 +458,7 @@ case "${action}" in
 		exit "$?"
 		;;
 	config)
-		set | grep '^WAVELET_'
+		set | egrep '^(WAVELET_|REGISTRY=)'
 		;;
 	help)
 		usage
