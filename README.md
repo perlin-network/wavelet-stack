@@ -6,9 +6,9 @@ Docker Machine.
 
 There are three provided tools:
 
-    1. `manage-swarm` - Manage Docker Swarm instances
-    2. `manage-stack` - Manage Wavelet Stack on a Docker Swarm
-    3. `build-all-nodes` - Builds all the nodes required to run a stack
+  1. `manage-swarm` - Manage Docker Swarm instances
+  2. `manage-stack` - Manage Wavelet Stack on a Docker Swarm
+  3. `build-all-nodes` - Builds all the nodes required to run a stack
 
 ## manage-swarm
 The `manage-swarm` tool helps create and manage remote Docker swarms using
@@ -50,17 +50,17 @@ on the Docker Machine host if using a remote Swarm.
 
 Configuration options are:
 
-    1. `REGISTRY` - Docker Registry to use (defaults to `localhost:5000`)
-    3. `WAVELET\_GENESIS` - Wavelet Genesis block descriptor
-    4. `WAVELET\_KEYS` - CSV list of private keys and public keys
-    5. `WAVELET\_NODES` - Number of Wavelet nodes to run (defaults to `3`)
-    6. `WAVELET\_RICH\_WALLETS` - Number of Rich wallets to create if generating the Genesis block (that is, if `WAVELET\_GENEISIS` is not supplied; defaults to `3`)
-    7. `WAVELET\_SNOWBALL\_K` - Wavelet Snowball K
-    8. `WAVELET\_SNOWBALL\_BETA` - Wavelet Snowball Beta
-    9. `WAVELET\_MEMORY\_MAX` - Max amount of memory to terminate the node after
-    10. `WAVELET\_NO\_RPC` - Boolean to indicate whether not RPC ports are exposed
-    11. `WAVELET\_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
-    12. `WAVELET\_CLEAN\_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
+  1. `REGISTRY` - Docker Registry to use (defaults to `localhost:5000`)
+  2. `WAVELET\_GENESIS` - Wavelet Genesis block descriptor
+  3. `WAVELET\_KEYS` - CSV list of private keys and public keys
+  4. `WAVELET\_NODES` - Number of Wavelet nodes to run (defaults to `3`)
+  5. `WAVELET\_RICH\_WALLETS` - Number of Rich wallets to create if generating the Genesis block (that is, if `WAVELET\_GENEISIS` is not supplied; defaults to `3`)
+  6. `WAVELET\_SNOWBALL\_K` - Wavelet Snowball K
+  7. `WAVELET\_SNOWBALL\_BETA` - Wavelet Snowball Beta
+  8. `WAVELET\_MEMORY\_MAX` - Max amount of memory to terminate the node after
+  9. `WAVELET\_NO\_RPC` - Boolean to indicate whether not RPC ports are exposed
+  10. `WAVELET\_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
+  11. `WAVELET\_CLEAN\_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}
