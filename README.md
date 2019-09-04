@@ -147,3 +147,17 @@ numeric `<nodeId>`.
 
 Duplicates the given stack to the specified `<newStackName>`.  This includes the configuration
 and database for the current stack.
+
+## build-all-nodes
+`build-all-nodes [<stackName>]`
+
+Builds all the node images (`wavelet-stack-lb`, and `wavelet-stack-node`) if needed, and
+pushes them to the remote registry.  If a `<stackName>` is provided then the configuration
+(`REGISTRY` and `WAVELET_TAG`) for that stack are used to build the images.
+
+That is `REGISTRY/wavelet-stack-lb:latest` will be created from the files in the
+`nodes/wavelet-stack-lb` directory and `REGISTRY/wavelet-stack-node:WAVELET_TAG`
+will be crated from `REGISTRY/wavelet:WAVELET_TAG` and the files in the
+`nodes/wavelet-stack-node` directory.
+
+If `WAVELET_TAG` is not specified it will default to `latest`.
