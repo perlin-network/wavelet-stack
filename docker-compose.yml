@@ -9,7 +9,8 @@ services:
                 image: "${REGISTRY-localhost:5000}/wavelet-stack-lb"
                 ports:
                         - "80"
-                        - "3000-3098"
+                        - "9000-9047"
+                        - "3000-3047"
         wavelet:
                 image: "${REGISTRY-localhost:5000}/wavelet-stack-node"
                 command: "wavelet --api.port 9000 --db /db"

@@ -67,11 +67,11 @@ function getExternalPort() {
 
 	internalPort="$1"
 
-	if [ -z "${serviceConfig_cache}" ]; then
-		serviceConfig_cache="$(docker service inspect "${stackName}_loadbalancer")"
+	if [ -z "${serviceConfigLB_cache}" ]; then
+		serviceConfigLB_cache="$(docker service inspect "${stackName}_loadbalancer")"
 	fi
 
-	externalPort="$(echo "${serviceConfig_cache}" | jq -crM '.[0].Endpoint.Ports[] | select(.TargetPort == '"${internalPort}"') | .PublishedPort')"
+	externalPort="$(echo "${serviceConfigLB_cache}" | jq -crM '.[0].Endpoint.Ports[] | select(.TargetPort == '"${internalPort}"') | .PublishedPort')"
 
 	echo "${externalPort}"
 }
@@ -206,7 +206,7 @@ function start() {
 function status() {
 	local running
 	local managerAddr
-	local apiPort rpcPortStart
+	local apiPort apiPortStart rpcPortStart
 
 	echo "${stackName} (on ${swarmName}):"
 
@@ -237,8 +237,13 @@ function status() {
 	managerAddr="$(managerAddress)"
 	apiPort="$(getExternalPort 80)"
 	rpcPortStart="$(getExternalPort 3000)"
+	apiPortStart="$(getExternalPort 9000)"
 
-	echo "  - API: http://${managerAddr}:${apiPort}/"
+	echo "  - API (main): http://${managerAddr}:${apiPort}/"
+
+	if [ -n "${apiPortStart}" ]; then
+		echo "  - API (all): http://${managerAddr}:${apiPortStart}/"
+	fi
 
 	if [ -n "${rpcPortStart}" ]; then
 		echo "  - RPC: ${managerAddr}:${rpcPortStart}"

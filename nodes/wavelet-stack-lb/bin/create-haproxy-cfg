@@ -43,9 +43,12 @@ function getPeers() {
 }
 
 function getNode1() {
+	local peer
 	local value
 
-	value="$(curl -sS http://sync:2379/v2/keys/peers/1 | jq -crM .node.value)"
+	peer="$(getPeers | sort -n | head -n 1)"
+
+	value="$(curl -sS "http://sync:2379/v2/keys/peers/${peer}" | jq -crM .node.value)"
 	if [ "${value}" = 'null' ]; then
 		value=''
 	fi
@@ -128,6 +131,7 @@ function generateHAProxyRPCConfiguration() {
 
 function generateHAProxyAPIConfiguration() {
 	local id peer
+	local waveletAddr lbPort
 
 	if [ -f /tmp/wavelet-disable-api ]; then
 		return 0
@@ -145,6 +149,26 @@ function generateHAProxyAPIConfiguration() {
 		peer="$(echo "${peer}" | cut -f 1 -d :)"
 
 		echo "    server wavelet-api-${id} ${peer}:9000 check"
+	done
+	echo ""
+
+	for peer in $(getPeers); do
+		waveletAddr="$(getPeerWaveletAddr "${peer}")"
+
+		if [ -z "${waveletAddr}" ]; then
+			continue
+		fi
+
+		lbPort=$[9000 + $peer - 1]
+
+		echo "frontend wavelet-api-front-${peer}"
+		echo "    bind :::${lbPort} v4v6"
+		echo "    default_backend wavelet-api-back-${peer}"
+		echo ""
+		echo "backend wavelet-api-back-${peer}"
+		echo "    mode http"
+		echo "    server wavelet-api-${peer} ${waveletAddr}:9000 check"
+		echo ""
 	done
 
 	return 0
