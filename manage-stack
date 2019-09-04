@@ -517,7 +517,7 @@ function duplicateStack() {
 	fi
 
 	mkdir -p "$(dirname "${newStackEnvFile}")"
-	dumpConfig > "${newStackEnvFile}"
+	dumpConfig | grep -v '^WAVELET_API_PORT=' > "${newStackEnvFile}"
 
 	retval='0'
 
