@@ -362,9 +362,10 @@ function logs() {
 }
 
 function usage() {
-	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status|config}"
+	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}"
 	echo "       manage-stack [-s <stackName>] {benchmark|nobenchmark}"
 	echo "       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>"
+	echo "       manage-stack [-s <stackName>] {config|edit-config}"
 }
 
 function benchmark() {
@@ -374,6 +375,31 @@ function benchmark() {
 
 function nobenchmark() {
 	docker service scale "${stackName}_benchmark=0"
+}
+
+function dumpConfig() {
+	set | egrep '^(WAVELET_|REGISTRY=)'
+}
+
+function editConfig() {
+	local tmpfile
+
+	tmpfile="$(mktemp)"
+
+	dumpConfig > "${tmpfile}"
+	"${VISUAL:-vi}" "${tmpfile}" || rm -f "${tmpfile}"
+
+	if [ -f "${tmpfile}" ]; then
+		if [ -n "${DOCKER_MACHINE_NAME}" ]; then
+			docker-machine scp "${tmpfile}" "${swarmName}-1:/etc/wavelet-stack/${stackName}"
+		else
+			cp "${tmpfile}" "${stackEnvFile}"
+		fi
+	fi
+
+	rm -f "${tmpfile}"
+
+	return 0
 }
 
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
@@ -463,7 +489,12 @@ case "${action}" in
 		exit "$?"
 		;;
 	config)
-		set | egrep '^(WAVELET_|REGISTRY=)'
+		dumpConfig
+		exit 0
+		;;
+	edit-config)
+		editConfig "$@"
+		exit "$?"
 		;;
 	help)
 		usage
