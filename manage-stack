@@ -319,6 +319,12 @@ function attach() {
 	local nodeID taskID containerID
 
 	nodeID="$1"
+
+	if [ -z "${nodeID}" ]; then
+		echo "Usage: manage-stack [-s <stackName>] attach <nodeId>" >&2
+		return 1
+	fi
+
 	taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
 	containerID="$(containerIDFromTaskID "${taskID}")" || return 1
 	setDockerMachineForTaskID "${taskID}"
@@ -332,6 +338,11 @@ function shell() {
 
 	nodeID="$1"
 	shift
+
+	if [ -z "${nodeID}" ]; then
+		echo "Usage: manage-stack [-s <stackName>] shell <nodeId> [<args...>]" >&2
+		return 1
+	fi
 
 	taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
 	containerID="$(containerIDFromTaskID "${taskID}")" || return 1
@@ -355,6 +366,11 @@ function logs() {
 
 	nodeID="$1"
 	shift
+
+	if [ -z "${nodeID}" ]; then
+		echo "Usage: manage-stack [-s <stackName>] logs <nodeId>" >&2
+		return 1
+	fi
 
 	taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
 
