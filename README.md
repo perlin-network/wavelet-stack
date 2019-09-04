@@ -15,7 +15,7 @@ The `manage-swarm` tool helps create and manage remote Docker swarms using
 Docker Machine.
 
 ### manage-swarm create
-`manage-swarm create <provider> <swarmName> ...
+`manage-swarm create <provider> <swarmName> ...`
 
 Creates a new Swarm.  Currently the only provider supported is
 digitalocean.
@@ -51,16 +51,16 @@ on the Docker Machine host if using a remote Swarm.
 Configuration options are:
 
   1. `REGISTRY` - Docker Registry to use (defaults to `localhost:5000`)
-  2. `WAVELET\_GENESIS` - Wavelet Genesis block descriptor
-  3. `WAVELET\_KEYS` - CSV list of private keys and public keys
-  4. `WAVELET\_NODES` - Number of Wavelet nodes to run (defaults to `3`)
-  5. `WAVELET\_RICH\_WALLETS` - Number of Rich wallets to create if generating the Genesis block (that is, if `WAVELET\_GENEISIS` is not supplied; defaults to `3`)
-  6. `WAVELET\_SNOWBALL\_K` - Wavelet Snowball K
-  7. `WAVELET\_SNOWBALL\_BETA` - Wavelet Snowball Beta
-  8. `WAVELET\_MEMORY\_MAX` - Max amount of memory to terminate the node after
-  9. `WAVELET\_NO\_RPC` - Boolean to indicate whether not RPC ports are exposed
-  10. `WAVELET\_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
-  11. `WAVELET\_CLEAN\_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
+  2. `WAVELET_GENESIS` - Wavelet Genesis block descriptor
+  3. `WAVELET_KEYS` - CSV list of private keys and public keys
+  4. `WAVELET_NODES` - Number of Wavelet nodes to run (defaults to `3`)
+  5. `WAVELET_RICH_WALLETS` - Number of Rich wallets to create if generating the Genesis block (that is, if `WAVELET_GENEISIS` is not supplied; defaults to `3`)
+  6. `WAVELET_SNOWBALL_K` - Wavelet Snowball K
+  7. `WAVELET_SNOWBALL_BETA` - Wavelet Snowball Beta
+  8. `WAVELET_MEMORY_MAX` - Max amount of memory to terminate the node after
+  9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed
+  10. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
+  11. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}
@@ -75,7 +75,7 @@ Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}
 `manage-stack stop`
 
 Stops the given stack -- this will not cleanup the volumes unless the
-stack configuration option `WAVELET\_CLEAN\_VOLUMES` is set to the value
+stack configuration option `WAVELET_CLEAN_VOLUMES` is set to the value
 `yes`.
 
 ### manage-stack start
