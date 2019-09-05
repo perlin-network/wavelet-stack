@@ -69,6 +69,7 @@ Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}
        manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>
        manage-stack [-s <stackName>] {config|edit-config}
        manage-stack [-s <stackName>] dump-db <nodeId> <outputFile>
+       manage-stack [-s <stackName>] cp <src>... <dest>
        manage-stack [-s <stackName>] duplicate-stack <newStackName>
 ```
 
@@ -142,6 +143,17 @@ variable `VISUAL` (defaulting to `vi`).
 
 Creates a local tarball named `<outputFile>` with the database configuration of the specific
 numeric `<nodeId>`.
+
+### manage-stack cp
+`manage-stack cp <src>... <dest>`
+
+Copies files either to or from a remote container.  Only one remote container can be
+specified (that is, you cannot copy to AND from a remote container).  Containers are
+identified by their nodeId (see `manage-stack attach` for the format of nodeIds).
+
+Example:
+
+    $ manage-stack cp 1:/tmp/test local-test
 
 ### manage-stack duplicate-stack
 `manage-stack duplicate-stack <newStackName>`

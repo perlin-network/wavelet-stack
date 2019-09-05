@@ -397,6 +397,7 @@ function usage() {
 	echo "       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>"
 	echo "       manage-stack [-s <stackName>] {config|edit-config}"
 	echo "       manage-stack [-s <stackName>] dump-db <nodeId> <outputFile>"
+	echo "       manage-stack [-s <stackName>] cp <src>... <dest>"
 	echo "       manage-stack [-s <stackName>] duplicate-stack <newStackName>"
 }
 
@@ -554,7 +555,11 @@ function duplicateStack() {
 	fi
 
 	if [ "${retval}" = '0' ]; then
-		cat "${tmpDBFile}" | callSelf -s "${destStackName}" shell 1 sh -c 'cd /db && rm -f * && gzip -dc | tar -xf - && ( pkill -9 wavelet || true )' || retval='1'
+		callSelf -s "${destStackName}" cp "${tmpDBFile}" '1:/tmp/db.tar.gz' || retval='1'
+	fi
+
+	if [ "${retval}" = '0' ]; then
+		callSelf -s "${destStackName}" shell 1 sh -c 'cd /db && rm -f * && cat /tmp/db.tar.gz | gzip -dc | tar -xf - && ( pkill -9 wavelet || true )' || retval='1'
 	fi
 
 	if [ "${retval}" = '0' ]; then
@@ -564,6 +569,37 @@ function duplicateStack() {
 	rm -f "${tmpDBFile}"
 
 	return "${retval}"
+}
+
+function copyFiles() {
+	local arg args
+	local nodeID taskID containerID
+
+	if [ "$#" = '0' ]; then
+		echo "Usage: manage-stack [-s <stackName>] cp <src>... <dest>" >&2
+
+		return 1
+	fi
+
+	args=()
+	for arg in "$@"; do
+		case "${arg}" in *:*)
+			nodeID="$(echo "${arg}" | cut -f 1 -d :)"
+			arg="$(echo "${arg}" | cut -f 2- -d :)"
+			taskID="$(taskIDFromNodeID "${nodeID}")" || return 1
+			containerID="$(containerIDFromTaskID "${taskID}")" || return 1
+			arg="${containerID}:${arg}"
+			;;
+		esac
+
+		args+=("${arg}")
+	done
+
+	if [ -n "${taskID}" ]; then
+		setDockerMachineForTaskID "${taskID}"
+	fi
+
+	docker cp "${args[@]}"
 }
 
 startupEnvironment="$(export)"
@@ -652,6 +688,10 @@ case "${action}" in
 		;;
 	attach|shell|logs|benchmark|nobenchmark|cleanVolumes)
 		"${action}" "$@"
+		exit "$?"
+		;;
+	cp)
+		copyFiles "$@"
 		exit "$?"
 		;;
 	config)
