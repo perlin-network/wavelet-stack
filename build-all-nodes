@@ -4,12 +4,15 @@ set -e
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+args=()
 if [ -n "$1" ]; then
 	stackName="$1"
 
-	eval "$(./manage-stack -s "${stackName}" config)"
-	export REGISTRY WAVELET_TAG
+	args+=(-s "${stackName}")
 fi
+
+eval "$(./manage-stack "${args[@]}" config)"
+export REGISTRY WAVELET_TAG
 
 cd nodes
 for dir in */; do
