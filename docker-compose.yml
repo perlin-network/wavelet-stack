@@ -9,8 +9,11 @@ services:
                 image: "${REGISTRY-localhost:5000}/wavelet-stack-lb"
                 ports:
                         - "80"
+                        - "443:443"
                         - "9000-9047"
                         - "3000-3047"
+                environment:
+                        - WAVELET_API_HOST=${WAVELET_API_HOST}
         wavelet:
                 image: "${REGISTRY-localhost:5000}/wavelet-stack-node:${WAVELET_TAG-latest}"
                 command: "wavelet --api.port 9000 --db /db"
@@ -24,6 +27,7 @@ services:
                         - WAVELET_GENESIS=${WAVELET_GENESIS}
                         - WAVELET_RICH_WALLETS=${WAVELET_RICH_WALLETS-3}
                         - WAVELET_NO_RPC=${WAVELET_NO_RPC}
+                        - WAVELET_API_HOST=${WAVELET_API_HOST}
                 volumes:
                         - wavelet_db:/db
                 depends_on:

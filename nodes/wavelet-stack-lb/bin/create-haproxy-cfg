@@ -145,12 +145,26 @@ function generateHAProxyAPIConfiguration() {
 	echo "    mode http"
 
 	for peer in $(getNode1); do
-		id="$(echo "${peer}" | sha1sum | cut -c 1-24)"
 		peer="$(echo "${peer}" | cut -f 1 -d :)"
 
-		echo "    server wavelet-api-${id} ${peer}:9000 check"
+		echo "    server wavelet-api ${peer}:9000 check"
 	done
 	echo ""
+
+	if [ -n "${WAVELET_API_HOST}" ]; then
+		echo "frontend wavelet-api-https-front"
+		echo "    bind :::443 v4v6"
+		echo "    default_backend wavelet-api-https-back"
+		echo ""
+		echo "backend wavelet-api-https-back"
+
+		for peer in $(getNode1); do
+			peer="$(echo "${peer}" | cut -f 1 -d :)"
+
+			echo "    server wavelet-api-https ${peer}:443 check"
+		done
+		echo ""
+	fi
 
 	for peer in $(getPeers); do
 		waveletAddr="$(getPeerWaveletAddr "${peer}")"

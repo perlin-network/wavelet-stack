@@ -195,6 +195,15 @@ function start() {
 		configFile="${tmp}"
 	fi
 
+	if [ -z "${WAVELET_API_HOST}" ]; then
+		tmp="$(mktemp)" || exit 1
+		toDelete+=("${tmp}")
+
+		grep -v ' "443:443"$' "${configFile}" > "${tmp}"
+
+		configFile="${tmp}"
+	fi
+
 	docker stack deploy --with-registry-auth -c "${configFile}" "${stackName}"
 	pushConfigToEtcd
 
@@ -206,7 +215,7 @@ function start() {
 function status() {
 	local running
 	local managerAddr
-	local apiPort apiPortStart rpcPortStart
+	local apiPort apiHttpsPort apiPortStart rpcPortStart
 
 	echo "${stackName} (on ${swarmName}):"
 
@@ -236,10 +245,15 @@ function status() {
 
 	managerAddr="$(managerAddress)"
 	apiPort="$(getExternalPort 80)"
+	apiHttpsPort="$(getExternalPort 443)"
 	rpcPortStart="$(getExternalPort 3000)"
 	apiPortStart="$(getExternalPort 9000)"
 
 	echo "  - API (main): http://${managerAddr}:${apiPort}/"
+
+	if [ -n "${apiHttpsPort}" ]; then
+		echo "  - API (main): https://${managerAddr}:${apiHttpsPort}/"
+	fi
 
 	if [ -n "${apiPortStart}" ]; then
 		echo "  - API (all): http://${managerAddr}:${apiPortStart}/"
@@ -609,7 +623,7 @@ if [ -n "${DOCKER_MACHINE_NAME}" ]; then
 	) || exit 1
 fi
 export REGISTRY WAVELET_BENCHMARK_NODES WAVELET_GENESIS WAVELET_KEYS WAVELET_NODES WAVELET_RICH_WALLETS
-export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA WAVELET_MEMORY_MAX WAVELET_NO_RPC WAVELET_TAG
+export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA WAVELET_MEMORY_MAX WAVELET_NO_RPC WAVELET_TAG WAVELET_API_HOST
 
 case "${action}" in
 	stop)
