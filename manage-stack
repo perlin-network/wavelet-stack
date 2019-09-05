@@ -511,6 +511,7 @@ function duplicateStack() {
 	local destStackName
 	local newStackEnvFile
 	local tmpDBFile
+	local try
 	local retval
 
 	destStackName="$1"
@@ -555,6 +556,15 @@ function duplicateStack() {
 	fi
 
 	if [ "${retval}" = '0' ]; then
+		for try in {1..10} __fail__; do
+			if [ "${try}" = '__fail__' ]; then
+				return 1
+			fi
+
+			callSelf -s "${destStackName}" shell 1 true && break
+			sleep 6
+		done
+
 		callSelf -s "${destStackName}" cp "${tmpDBFile}" '1:/tmp/db.tar.gz' || retval='1'
 	fi
 
