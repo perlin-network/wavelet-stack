@@ -452,35 +452,39 @@ function dumpDB() {
 		return 1
 	fi
 
-	shell "${nodeID}" sh -c "$(cat <<\_EOF_
-		set -e
-		while true; do
-			cd /
-			rm -rf /db2
-			mkdir /db2
-			cd /db2
-			before="$(cd /db && sha1sum * | sha1sum | awk '{ print $1 }')"
-			cp /db/* .
-			after="$(cd /db && sha1sum * | sha1sum | awk '{ print $1 }')"
-			verify="$(cd /db2 && sha1sum * | sha1sum | awk '{ print $1 }')"
-			if [ "${before}" = "${after}" ]; then
-				if [ "${verify}" != "${before}" ]; then
-					echo "ERROR" >&2
-					exit 1
+	(
+		shell "${nodeID}" sh -c "$(cat <<\_EOF_
+			set -e
+			while true; do
+				cd /
+				rm -rf /db2
+				mkdir /db2
+				cd /db2
+				before="$(cd /db && sha1sum * | sha1sum | awk '{ print $1 }')"
+				cp /db/* .
+				after="$(cd /db && sha1sum * | sha1sum | awk '{ print $1 }')"
+				verify="$(cd /db2 && sha1sum * | sha1sum | awk '{ print $1 }')"
+				if [ "${before}" = "${after}" ]; then
+					if [ "${verify}" != "${before}" ]; then
+						echo "ERROR" >&2
+						exit 1
+					fi
+					break
 				fi
-				break
-			fi
-			sleep 0.1
-		done
-		cd /db2
-		rm -f /db.tar
-		tar -cf /db.tar *
+				sleep 0.1
+			done
+			cd /db2
+			rm -f /db.tar
+			tar -cf /db.tar *
 _EOF_
-)" || return 1
+)" || exit 1
+	) || return 1
 
 	tmpfile="$(mktemp)"
 
-	shell "${nodeID}" gzip -9c /db.tar > "${tmpfile}"
+	(
+		shell "${nodeID}" gzip -9c /db.tar
+	) > "${tmpfile}"
 	retval="$?"
 
 	if [ "${retval}" = '0' ]; then
