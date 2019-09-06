@@ -28,6 +28,7 @@ services:
                         - WAVELET_RICH_WALLETS=${WAVELET_RICH_WALLETS-3}
                         - WAVELET_NO_RPC=${WAVELET_NO_RPC}
                         - WAVELET_API_HOST=${WAVELET_API_HOST}
+                        - WAVELET_API_ACME_ACCOUNT_KEY=${WAVELET_API_ACME_ACCOUNT_KEY}
                         - WAVELET_BACKUP_DB=${WAVELET_BACKUP_DB-false}
                 volumes:
                         - wavelet_db:/db

@@ -215,6 +215,12 @@ function runWavelet() {
 		set -- "$@" --port "${port}"
 	fi
 
+	if [ -n "${WAVELET_API_ACME_ACCOUNT_KEY}" ]; then
+		certsDir='/certs'
+		mkdir -p "${certsDir}"
+		echo "${WAVELET_API_ACME_ACCOUNT_KEY}" > "${certsDir}/acme_account+key"
+	fi
+
 	maintainPeerRegistry "${port}"
 
 	if [ -z "${WAVELET_MEMORY_MAX}" ] || [ "${WAVELET_MEMORY_MAX}" = '0' ]; then

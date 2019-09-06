@@ -202,6 +202,10 @@ function start() {
 		grep -v ' "443:443"$' "${configFile}" > "${tmp}"
 
 		configFile="${tmp}"
+	else
+		if [ -z "${WAVELET_API_ACME_ACCOUNT_KEY}" ]; then
+			echo "warning: WAVELET_API_ACME_ACCOUNT_KEY is not specified but WAVELET_API_HOST is, this is probably bad" >&2
+		fi
 	fi
 
 	docker stack deploy --with-registry-auth -c "${configFile}" "${stackName}"
@@ -499,7 +503,7 @@ _EOF_
 
 function callSelf() {
 	(
-		unset $(export | sed 's@=.*$@@;s@^.* @@')
+		unset $(export | grep '^declare -x ' | sed 's@=.*$@@;s@^.* @@')
 		eval "${startupEnvironment}"
 
 		./manage-stack "$@"
@@ -673,7 +677,8 @@ if [ -n "${DOCKER_MACHINE_NAME}" ]; then
 	) || exit 1
 fi
 export REGISTRY WAVELET_BENCHMARK_NODES WAVELET_GENESIS WAVELET_KEYS WAVELET_NODES WAVELET_RICH_WALLETS
-export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA WAVELET_MEMORY_MAX WAVELET_NO_RPC WAVELET_TAG WAVELET_API_HOST
+export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA WAVELET_MEMORY_MAX WAVELET_NO_RPC WAVELET_TAG
+export WAVELET_API_HOST WAVELET_API_ACME_ACCOUNT_KEY
 export WAVELET_BACKUP_DB
 
 case "${action}" in
