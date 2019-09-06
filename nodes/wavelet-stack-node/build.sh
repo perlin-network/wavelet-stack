@@ -13,6 +13,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 WAVELET_TAG="${WAVELET_TAG:-latest}"
 
+if [ -n "${WAVELET_BUILD_DIR}" ]; then
+	"${MAKE:-make}" -C "${WAVELET_BUILD_DIR}" docker R="${REGISTRY}/wavelet" T="${WAVELET_TAG}"
+fi
+
 sed '
 	s|${REGISTRY}|'"${REGISTRY}"'|g
 	s|${WAVELET_TAG}|'"${WAVELET_TAG}"'|g

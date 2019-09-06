@@ -73,6 +73,7 @@ Configuration options are:
   12. `WAVELET_API_HOST` - Hostname, if supplied, HTTPS support is enabled on port 443/tcp
   13. `WAVELET_API_ACME_ACCOUNT_KEY` - PEM encoded ACME account key for autocert.  Generally if `WAVELET_API_HOST` is provided, this should be provided also.
   14. `WAVELET_BACKUP_DB` - Boolean to indicate whether database backups are automatically taken for wavelet nodes
+  15. `WAVELET_BUILD_DIR` - Directory to rebuild the "wavelet" container from when building all images using `build-all-nodes`
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}

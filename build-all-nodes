@@ -12,7 +12,7 @@ if [ -n "$1" ]; then
 fi
 
 eval "$(./manage-stack "${args[@]}" config)"
-export REGISTRY WAVELET_TAG
+export REGISTRY WAVELET_TAG WAVELET_BUILD_DIR WAVELET_BUILD_COMMIT
 
 cd nodes
 for dir in */; do
