@@ -170,6 +170,26 @@ function setPeers() {
 	}
 }
 
+function waveletDBBackup() {
+	(
+		backupDir='/db/.backups'
+		backupFile="${backupDir}/backup-$(date +%Y-%m-%d-%H-%M.tar.gz)"
+		set -e
+		mkdir -p "${backupDir}"
+
+		cd /db
+
+		if [ "$(echo *)" = '*' ]; then
+			return
+		fi
+
+		tar -cf - * | gzip -9c > "${backupFile}"
+
+		cd "${backupDir}"
+		find . -name 'backup-*.tar.gz' -mtime +2 -delete
+	)
+}
+
 function runWavelet() {
 	local port
 	local argNextArg
@@ -232,6 +252,13 @@ function runWavelet() {
 			pkill wavelet
 		fi
 	done &
+
+	if [ "${WAVELET_BACKUP_DB}" = 'true' ]; then
+		while true; do
+			waveletDBBackup
+			sleep $[60 * 30]
+		done &
+	fi
 
 	# Run the wavelet process in a loop so that exiting just
 	# causes it to reload, unless a special marker file

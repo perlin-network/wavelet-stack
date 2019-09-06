@@ -71,6 +71,7 @@ Configuration options are:
   10. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
   11. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
   12. `WAVELET_API_HOST` - Hostname, if supplied, HTTPS support is enabled on port 443/tcp
+  13. `WAVELET_BACKUP_DB` - Boolean to indicate whether database backups are automatically taken for wavelet nodes
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}
