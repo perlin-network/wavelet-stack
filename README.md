@@ -10,6 +10,15 @@ There are three provided tools:
   2. `manage-stack` - Manage Wavelet Stack on a Docker Swarm
   3. `build-all-nodes` - Builds all the nodes required to run a stack
 
+These tools will look at configuration files in the `config/` directory
+as well as on `/etc/wavelet-stack` on remote Docker Machine hosts.
+
+The configuration files are:
+
+  1. `config/default` - Always loaded;  Useful for setting "`stackName`" to set the default stack
+  2. `config/swarm/<swarmName>` - Loaded when using a particular swarm
+  3. `config/stack/<stackName>` - Loaded when using a particular stack, should not be used for remote stacks because other developers may not have the same configuration.  It is usually better to use `manage-stack edit-config` to edit this.
+
 ## manage-swarm
 The `manage-swarm` tool helps create and manage remote Docker swarms using
 Docker Machine.
