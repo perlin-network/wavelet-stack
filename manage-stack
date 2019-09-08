@@ -396,7 +396,7 @@ function logs() {
 }
 
 function usage() {
-	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}"
+	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}"
 	echo "       manage-stack [-s <stackName>] {benchmark|nobenchmark}"
 	echo "       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>"
 	echo "       manage-stack [-s <stackName>] {config|edit-config}"
@@ -616,6 +616,32 @@ function copyFiles() {
 	docker cp "${args[@]}"
 }
 
+function runOnService() {
+	local service args
+	local taskIDs
+
+	service="${stackName}_$1"
+
+	shift
+	args=("$@")
+
+	taskIDs=( $(docker service ps --filter "desired-state=Running" -q "${service}" ) )
+
+	(
+		for taskID in "${taskIDs[@]}"; do
+			(
+				containerID="$(containerIDFromTaskID "${taskID}")" || return 1
+				setDockerMachineForTaskID "${taskID}"
+
+				docker exec "${containerID}" "${args[@]}"
+			) &
+		done
+
+		wait
+	)
+
+}
+
 startupEnvironment="$(export)"
 
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
@@ -690,7 +716,10 @@ case "${action}" in
 		start
 		exit "$?"
 		;;
-	restart)
+	restart|restart-wavelet)
+		runOnService wavelet pkill -9 -x /wavelet
+		;;
+	reset)
 		stop || exit "$?"
 		if [ "$1" = '--hard' ]; then
 			cleanVolumes --force || exit "$?"

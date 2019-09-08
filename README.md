@@ -76,7 +76,7 @@ Configuration options are:
   15. `WAVELET_BUILD_DIR` - Directory to rebuild the "wavelet" container from when building all images using `build-all-nodes`
 
 ```
-Usage: manage-stack [-s <stackName>] {stop|start|update|restart|status}
+Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}
        manage-stack [-s <stackName>] {benchmark|nobenchmark}
        manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>
        manage-stack [-s <stackName>] {config|edit-config}
@@ -102,7 +102,12 @@ Starts the given stack.
 
 Updates the stack using any changed parameters.
 
-### manage-stack restart
+### manage-stack restart-wavelet
+`manage-stack restart-wavelet`
+
+Restart the wavelet process on all nodes
+
+### manage-stack reset
 `manage-stack restart [--hard]`
 
 Restarts (stops, then starts) a given stack.  If `--hard` is specified then the stack's
