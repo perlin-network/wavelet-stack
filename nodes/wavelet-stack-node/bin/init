@@ -215,10 +215,17 @@ function runWavelet() {
 		set -- "$@" --port "${port}"
 	fi
 
+	WAVELET_CERTS_CACHE_DIR=''
+	if [ -n "${WAVELET_API_HOST}" ]; then
+		WAVELET_CERTS_CACHE_DIR="$(mktemp -d)"
+	fi
+	export WAVELET_CERTS_CACHE_DIR
+
 	if [ -n "${WAVELET_API_ACME_ACCOUNT_KEY}" ]; then
-		certsDir='/certs'
-		mkdir -p "${certsDir}"
-		echo "${WAVELET_API_ACME_ACCOUNT_KEY}" > "${certsDir}/acme_account+key"
+		if [ -n "${WAVELET_CERTS_CACHE_DIR}" ]; then
+			mkdir -p "${WAVELET_CERTS_CACHE_DIR}"
+			echo "${WAVELET_API_ACME_ACCOUNT_KEY}" > "${WAVELET_CERTS_CACHE_DIR}/acme_account+key"
+		fi
 	fi
 
 	maintainPeerRegistry "${port}"
