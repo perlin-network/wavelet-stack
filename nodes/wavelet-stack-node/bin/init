@@ -217,7 +217,9 @@ function runWavelet() {
 
 	WAVELET_CERTS_CACHE_DIR=''
 	if [ -n "${WAVELET_API_HOST}" ]; then
-		WAVELET_CERTS_CACHE_DIR="$(mktemp -d)"
+		WAVELET_CERTS_CACHE_DIR='/db/.certs'
+		mkdir -p "${WAVELET_CERTS_CACHE_DIR}"
+		chmod 700 "${WAVELET_CERTS_CACHE_DIR}"
 	fi
 	export WAVELET_CERTS_CACHE_DIR
 
