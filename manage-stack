@@ -663,7 +663,7 @@ shift $[${OPTIND} - 1]
 action="$1"
 shift
 
-configDir="$(dirname "${BASH_SOURCE[0]}")/config"
+configDir="./config"
 globalEnvFile="${configDir}/default"
 if [ -f "${globalEnvFile}" ]; then
 	. "${globalEnvFile}"
