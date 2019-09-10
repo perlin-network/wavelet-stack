@@ -74,6 +74,7 @@ Configuration options are:
   13. `WAVELET_API_ACME_ACCOUNT_KEY` - PEM encoded ACME account key for autocert.  Generally if `WAVELET_API_HOST` is provided, this should be provided also.
   14. `WAVELET_BACKUP_DB` - Boolean to indicate whether database backups are automatically taken for wavelet nodes
   15. `WAVELET_BUILD_DIR` - Directory to rebuild the "wavelet" container from when building all images using `build-all-nodes`
+  16. `WAVELET_RESTART_ON_PEER_CHANGE` - Boolean to indicate whether wavelet should be restarted if peers change (defaults to true)
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}

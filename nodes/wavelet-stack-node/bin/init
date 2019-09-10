@@ -254,19 +254,21 @@ function runWavelet() {
 	# command-line are down, consensus breaks.  So we
 	# monitor that set and if it changes, restart Wavelet
 	setPeers
-	while true; do
-		sleep $[30 + ($RANDOM % 30)]
+	if [ "${WAVELET_RESTART_ON_PEER_CHANGE}" != 'false' ]; then
+		while true; do
+			sleep $[30 + ($RANDOM % 30)]
 
-		oldPeers=("${peers[@]}")
-		setPeers
+			oldPeers=("${peers[@]}")
+			setPeers
 
-		if [ "${peers[*]}" != "${oldPeers[*]}" ]; then
-			echo "PEERS DIFFER:" >&2
-			echo "  OLD: ${oldPeers[*]}" >&2
-			echo "  NEW: ${peers[*]}" >&2
-			pkill wavelet
-		fi
-	done &
+			if [ "${peers[*]}" != "${oldPeers[*]}" ]; then
+				echo "PEERS DIFFER:" >&2
+				echo "  OLD: ${oldPeers[*]}" >&2
+				echo "  NEW: ${peers[*]}" >&2
+				pkill wavelet
+			fi
+		done &
+	fi
 
 	if [ "${WAVELET_BACKUP_DB}" = 'true' ]; then
 		while true; do
