@@ -307,6 +307,7 @@ function containerIDFromTaskID() {
 
 function taskIDFromNodeID() {
 	local nodeID taskName taskID
+	local nodeIndex
 
 	nodeID="$1"
 	if [ -z "${nodeID}" ]; then
@@ -315,15 +316,22 @@ function taskIDFromNodeID() {
 		return 1
 	fi
 
-	if [ "${nodeID}" = 'benchmark' ]; then
-		taskName="${stackName}_benchmark.1"
-	elif [ "${nodeID}" = 'loadbalancer' ]; then
-		taskName="${stackName}_loadbalancer.1"
-	elif [ "${nodeID}" = 'sync' ]; then
-		taskName="${stackName}_sync.1"
-	else
-		taskName="${stackName}_wavelet.${nodeID}"
-	fi
+	nodeIndex='1'
+	case "${nodeID}" in
+		*.*)
+			nodeIndex="$(echo "${nodeID}" | cut -f 2 -d .)"
+			nodeID="$(echo "${nodeID}" | cut -f 1 -d .)"
+			;;
+	esac
+
+	case "${nodeID}" in
+		benchmark|loadbalancer|sync|wavelet)
+			taskName="${stackName}_${nodeID}.${nodeIndex}"
+			;;
+		*)
+			taskName="${stackName}_wavelet.${nodeID}"
+			;;
+	esac
 
 	taskID="$(docker stack ps -q -f NAME="${taskName}" "${stackName}" | head -n 1)" || return 1
 	if [ "${taskID}" = 'null' ]; then
@@ -406,7 +414,14 @@ function usage() {
 }
 
 function benchmark() {
-	docker service scale "${stackName}_benchmark=1" || return 1
+	local count
+
+	count="$1"
+	if [ -z "${count}" ]; then
+		count='1'
+	fi
+
+	docker service scale "${stackName}_benchmark=${count}" || return 1
 	attach benchmark
 }
 

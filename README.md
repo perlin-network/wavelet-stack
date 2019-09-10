@@ -120,17 +120,24 @@ specified as `yes`.
 Dumps the stack status to stdout.
 
 ### manage-stack benchmark
-`manage-stack benchmark`
+`manage-stack benchmark [<count>]`
 `manage-stack nobenchmark`
 
-Starts (or stops, in the case of `nobenchmark`) the benchmarking node.
+Starts (or stops, in the case of `nobenchmark`) the benchmarking node.  If `<count>` is specified
+the that number of benchmarking nodes will be started, if not specified then one benchmarking
+node will be started.
 
 ### manage-stack attach
 `manage-stack attach <nodeId>`
 
 Attach to the console of the specified node.  Node IDs are numeric to indicate which Wavelet
-node to attach to, or can be "`sync`" or "`loadbalancer`" to specify that the "sync" node or
-"loadbalancer" node should be attached to, respectively.
+node to attach to, or can be "`sync`", "`loadbalancer`", or "`benchmark`" to specify that the
+"sync" node, the "loadbalancer" node, or the "benchmark" node should be attached to, respectively.
+
+If multiple benchmark nodes are running you can append the "`<nodeId>`" with a dot and index.  For
+example:
+
+    manage-stack attach benchmark.2
 
 ### manage-stack shell
 `manage-stack shell <nodeId> [<cmd...>]`
