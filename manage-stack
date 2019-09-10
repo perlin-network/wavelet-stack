@@ -405,7 +405,8 @@ function logs() {
 
 function usage() {
 	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}"
-	echo "       manage-stack [-s <stackName>] {benchmark|nobenchmark}"
+	echo "       manage-stack [-s <stackName>] benchmark [<count>]"
+	echo "       manage-stack [-s <stackName>] nobenchmark"
 	echo "       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>"
 	echo "       manage-stack [-s <stackName>] {config|edit-config}"
 	echo "       manage-stack [-s <stackName>] dump-db <nodeId> <outputFile>"

@@ -77,7 +77,8 @@ Configuration options are:
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}
-       manage-stack [-s <stackName>] {benchmark|nobenchmark}
+       manage-stack [-s <stackName>] benchmark [<count>]
+       manage-stack [-s <stackName>] nobenchmark
        manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>
        manage-stack [-s <stackName>] {config|edit-config}
        manage-stack [-s <stackName>] dump-db <nodeId> <outputFile>
