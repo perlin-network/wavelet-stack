@@ -1,16 +1,16 @@
 #! /usr/bin/env bash
 
-if [ -n "${WAVELET_API_HOST}" ]; then
-	# XXX:TODO: We cannot check the health if HTTPS is enabled currently
-	exit 0
+syncURL="http://sync:2379/v2/keys"
+roundsURL="${syncURL}/rounds"
+apiPort='9000'
+apiURL="http://localhost:${apiPort}"
+
+status="$(curl -s "${apiURL}/ledger" | jq -crM '.peers[].address')"
+
+if [ -z "${status}" ]; then
+	echo "FAILED: No peers" >&2
+
+	exit 1
 fi
 
-status="$(curl -s http://localhost:9000/ledger | jq -crM '.peers[].address')"
-
-if [ -n "${status}" ]; then
-	exit 0
-fi
-
-echo "FAILED: No peers" >&2
-
-exit 1
+exit 0
