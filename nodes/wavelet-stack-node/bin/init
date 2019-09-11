@@ -174,16 +174,48 @@ function waveletDBBackup() {
 	(
 		backupDir='/db/.backups'
 		backupFile="${backupDir}/backup-$(date +%Y-%m-%d-%H-%M.tar.gz)"
-		set -e
-		mkdir -p "${backupDir}"
 
+		set -e
+
+		mkdir -p "${backupDir}"
 		cd /db
 
 		if [ "$(echo *)" = '*' ]; then
 			return
 		fi
 
+		tmpdir=''
+		for try in {1..10} __fail__; do
+			if [ -n "${tmpdir}" ]; then
+				rm -rf "${tmpdir}"
+			fi
+
+			if [ "${try}" = '__fail__' ]; then
+				exit 1
+			fi
+
+			tmpdir="$(mktemp -d)"
+
+			(
+				before="$(sha1sum * | sha1sum)"
+				cp * "${tmpdir}/"
+				after="$(sha1sum * | sha1sum)"
+
+				if [ "${before}" = "${after}" ]; then
+					exit 0
+				else
+					exit 1
+				fi
+			) && break
+		done
+
+		cd "${tmpdir}"
+
 		tar -cf - * | gzip -9c > "${backupFile}"
+
+		cd /
+
+		rm -rf "${tmpdir}"
 
 		cd "${backupDir}"
 		find . -name 'backup-*.tar.gz' -mtime +2 -delete
