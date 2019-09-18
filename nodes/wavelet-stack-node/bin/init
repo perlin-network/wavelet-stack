@@ -5,6 +5,9 @@ peersURL="${syncURL}/peers"
 mappingURL="${syncURL}/mapping"
 peerID="${WAVELET_NODE_ID}"
 
+WAVELET_API_SECRET="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | sha256sum | cut -c 1-64)"
+export WAVELET_API_SECRET
+
 function getKey() {
 	local id keys
 
@@ -59,7 +62,18 @@ function maintainPeerRegistry() {
 	) &
 }
 
-function getPeers() {
+function getNodePeers() {
+	local peers
+
+	peers="$(curl -sSL http://localhost:9000/ledger 2>/dev/null | jq -crM '.peers[].address' 2>/dev/null | sort -u)"
+	if [ "${peers}" = 'null' ]; then
+		peers=''
+	fi
+
+	echo "${peers}"
+}
+
+function getSyncPeers() {
 	local peerIDs
 	local peer
 
@@ -155,21 +169,6 @@ function getExternalIP() {
 	echo "${addr}"
 }
 
-function setPeers() {
-	local try
-	local maxTries
-
-	maxTries=$[30 + (${WAVELET_NODE_ID} * 2) + $[RANDOM % 50]]
-
-	for ((try = 0; try < maxTries; try++)) {
-		peers=( $(getPeers) )
-		if [ "${#peers[@]}" != '0' ]; then
-			break
-		fi
-		sleep 1
-	}
-}
-
 function waveletDBBackup() {
 	(
 		backupDir='/db/.backups'
@@ -220,6 +219,57 @@ function waveletDBBackup() {
 		cd "${backupDir}"
 		find . -name 'backup-*.tar.gz' -mtime +2 -delete
 	)
+}
+
+function addOrRemoveWaveletPeer() {
+	local mode peer
+	local curlArgs
+	local output error msg
+
+	mode="$1"
+	peer="$2"
+
+	curlArgs=(
+		-H "Authorization: Bearer ${WAVELET_API_SECRET}"
+		-d "{\"address\": \"${peer}\"}"
+		"http://localhost:9000/node/${mode}"
+	)
+
+	output="$(curl -sSL "${curlArgs[@]}")"
+	error="$(jq -crM .error <<<"${output}" 2>/dev/null)"
+	msg="$(jq -crM .msg <<<"${output}" 2>/devnull)"
+
+	if [ "${error}" = 'null' ]; then
+		error=''
+	fi
+
+	if [ "${msg}" = 'null' ]; then
+		msg=''
+	fi
+
+	if [ -z "${error}" -a -n "${msg}" ]; then
+		return 0
+	fi
+
+	if [ -z "${msg}" -a -z "${error}" ]; then
+		msg="${output}"
+	fi
+
+	if [ -z "${error}" ]; then
+		error="${msg}"
+	fi
+
+	echo "Failed to ${mode} peer ${peer}: ${error}" >&2
+
+	return 1
+}
+
+function addWaveletPeer() {
+	addOrRemoveWaveletPeer connect "$@"
+}
+
+function removeWaveletPeer() {
+	addOrRemoveWaveletPeer disconnect "$@"
 }
 
 function runWavelet() {
@@ -282,25 +332,83 @@ function runWavelet() {
 
 	set | grep '^WAVELET' > /tmp/environment.txt
 
-	# XXX:TODO: Currently if any peers specified on the
-	# command-line are down, consensus breaks.  So we
-	# monitor that set and if it changes, restart Wavelet
-	setPeers
-	if [ "${WAVELET_RESTART_ON_PEER_CHANGE}" != 'false' ]; then
-		while true; do
-			sleep $[30 + ($RANDOM % 30)]
-
-			oldPeers=("${peers[@]}")
-			setPeers
-
-			if [ "${peers[*]}" != "${oldPeers[*]}" ]; then
-				echo "PEERS DIFFER:" >&2
-				echo "  OLD: ${oldPeers[*]}" >&2
-				echo "  NEW: ${peers[*]}" >&2
-				pkill wavelet
-			fi
-		done &
+	haveConnectAPI='false'
+	if /wavelet --help 2>/dev/null | grep 'WAVELET_API_SECRET' >/dev/null; then
+		haveConnectAPI='true'
 	fi
+
+	# Add or Remove peers as they come/go
+	while true; do
+		sleep $[10 + ($RANDOM % 10)]
+
+		if [ -z "${removeErrors}" ]; then
+			removeErrors='0'
+			addErrors='0'
+
+			removeErrorThreshold='10'
+			if [ "${haveConnectAPI}" = 'true' ]; then
+				addErrorThreshold='1000'
+			else
+				addErrorThreshold='1'
+			fi
+		fi
+
+		oldPeers=( $(getNodePeers) )
+		newPeers=( $(getSyncPeers) )
+
+		if [ "${newPeers[*]}" != "${oldPeers[*]}" ]; then
+			echo "PEERS DIFFER:" >&2
+			echo "  OLD: ${oldPeers[*]}" >&2
+			echo "  NEW: ${newPeers[*]}" >&2
+
+			for oldPeer in "${oldPeers[@]}"; do
+				peerStillValid='false'
+				for newPeer in "${newPeers[@]}"; do
+					if [ "${oldPeer}" = "${newPeer}" ]; then
+						peerStillValid='true'
+						break
+					fi
+				done
+
+				if [ "${peerStillValid}" = 'false' ]; then
+					echo "  Removing: ${oldPeer}" >&2
+					if removeWaveletPeer "${oldPeer}"; then
+						removeErrors='0'
+					else
+						removeErrors=$[$removeErrors + 1]
+					fi
+				fi
+			done
+			for newPeer in "${newPeers[@]}"; do
+				peerAlreadyPresent='false'
+				for oldPeer in "${oldPeers[@]}"; do
+					if [ "${oldPeer}" = "${newPeer}" ]; then
+						peerAlreadyPresent='true'
+						break
+					fi
+				done
+				if [ "${peerAlreadyPresent}" = 'false' ]; then
+					echo "  Adding: ${newPeer}" >&2
+					if addWaveletPeer "${newPeer}"; then
+						addErrors='0'
+					else
+						addErrors=$[$addErrors + 1]
+					fi
+				fi
+			done
+
+			# If there is a continious stream of errors coming from Wavelet
+			# then kill the process and let it sort itself out
+			if [ "${removeErrors}" -gt 0 -o "${addErrors}" -gt 0 ]; then
+				echo "  Error Counts: Remove: ${removeErrors}/${removeErrorThreshold}; Add: ${addErrors}/${addErrorThreshold}" >&2
+			fi
+			if [ "${removeErrors}" -gt "${removeErrorThreshold}" -o "${addErrors}" -gt "${addErrorThreshold}" ]; then
+				addErrors='0'
+				removeErrors='0'
+				pkill -9 -x /wavelet
+			fi
+		fi
+	done &
 
 	if [ "${WAVELET_BACKUP_DB}" = 'true' ]; then
 		while true; do
@@ -313,15 +421,18 @@ function runWavelet() {
 	# causes it to reload, unless a special marker file
 	# exists
 	retval='1'
+	waveletAddArgs=()
 	while true; do
 		if [ -f /tmp/wavelet.exit ]; then
 			break
 		fi
 
-		/wavelet --host "$(getExternalIP)" "$@" "${peers[@]}"
-		retval="$?"
+		if [ "${haveConnectAPI}" = 'false' ]; then
+			waveletAddArgs=( $(getSyncPeers) )
+		fi
 
-		setPeers
+		/wavelet --host "$(getExternalIP)" "$@" "${waveletAddArgs[@]}"
+		retval="$?"
 
 		sleep 0.1
 	done
