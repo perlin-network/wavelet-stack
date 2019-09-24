@@ -482,7 +482,7 @@ function runBenchmark() {
 
 	echo "Benchmarking against node ${otherPeerID} (${otherPeerIP})"
 
-	exec /benchmark remote -host "${otherPeerIP}" --wallet "$(getPrivateKey)"
+	exec /benchmark remote -host "${otherPeerIP}" -wallet "$(getPrivateKey)"
 
 	exit 1
 }
