@@ -43,8 +43,8 @@ services:
                 healthcheck:
                         test: "/opt/perlin/bin/health"
         benchmark:
-                image: "${REGISTRY-localhost:5000}/wavelet-stack-node"
-                command: "benchmark remote -host wavelet:9000"
+                image: "${REGISTRY-localhost:5000}/wavelet-stack-node:${WAVELET_TAG-latest}"
+                command: "benchmark"
                 stdin_open: true
                 depends_on:
                         - wavelet

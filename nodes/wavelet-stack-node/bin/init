@@ -94,6 +94,41 @@ function getSyncPeers() {
 	fi
 }
 
+function getMaxSyncPeerID() {
+	curl -sSL "${peersURL}" | jq -crM '.node.nodes[].key' | sed 's@/peers/@@' | sort -n | tail -n 1
+
+}
+
+function getSyncPeer() {
+	local id portType
+	local peerIP
+
+	id="$1"
+	portType="$2"
+
+	if [ -z "${portType}" ]; then
+		portType='api'
+	fi
+
+	peerIP="$(curl -sSL "${peersURL}/${id}" 2>/dev/null | jq -crM .node.value)"
+
+	case "${portType}" in
+		rpc)
+			;;
+		api)
+			peerIP="$(echo "${peerIP}" | cut -f 1 -d :):9000"
+			;;
+		*)
+			echo "Invalid port type: ${portType}" >&2
+			return 1
+			;;
+	esac
+
+	echo "${peerIP}"
+
+	return 0
+}
+
 function cacheExternalMappingData() {
 	local data
 	while true; do
@@ -440,7 +475,14 @@ function runWavelet() {
 }
 
 function runBenchmark() {
-	exec /benchmark "$@" --wallet "$(getPrivateKey)"
+	local otherPeerID otherPeerIP
+
+	otherPeerID=$[("${peerID}" % $(getMaxSyncPeerID)) + 1]
+	otherPeerIP="$(getSyncPeer "${otherPeerID}")"
+
+	echo "Benchmarking against node ${otherPeerID} (${otherPeerIP})"
+
+	exec /benchmark remote -host "${otherPeerIP}" --wallet "$(getPrivateKey)"
 
 	exit 1
 }
