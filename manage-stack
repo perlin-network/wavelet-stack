@@ -208,6 +208,12 @@ function start() {
 		fi
 	fi
 
+	case "${WAVELET_REBUILD_ON_START}" in
+		y|Y|yes|true|1)
+			./build-all-nodes "${stackName}"
+			;;
+	esac
+
 	docker stack deploy --with-registry-auth -c "${configFile}" "${stackName}"
 	pushConfigToEtcd
 
