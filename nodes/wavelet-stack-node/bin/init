@@ -206,7 +206,7 @@ function getExternalIP() {
 
 function waveletDBBackup() {
 	(
-		backupDir='/db/.backups'
+		backupDir='/data/backups'
 		backupFile="${backupDir}/backup-$(date +%Y-%m-%d-%H-%M.tar.gz)"
 
 		set -e
@@ -314,6 +314,29 @@ function runWavelet() {
 	local waveletAddArgs
 	local startTime stopTime failCount
 
+	# Migrate from the old storage schema of directly on the data
+	# volume to in a separate sub-directory
+	if [ ! -d /data/db ] ; then
+		if [ -e /data/LOG -o -e /data/CURRENT ]; then
+			(
+				set -e
+				cd /data
+				mkdir db
+				mv * db
+
+				if [ -d .certs ]; then
+					mv .certs /data/certs
+				fi
+
+				if [ -d .backups ]; then
+					mv .backups /data/backups
+				fi
+			) || exit 1
+		fi
+	fi
+
+	ln -s /data/db /db
+
 	port="$(getExternalPort)"
 	nextArg=''
 	needPort='true'
@@ -336,7 +359,7 @@ function runWavelet() {
 
 	WAVELET_CERTS_CACHE_DIR=''
 	if [ -n "${WAVELET_API_HOST}" ]; then
-		WAVELET_CERTS_CACHE_DIR='/db/.certs'
+		WAVELET_CERTS_CACHE_DIR='/data/certs'
 		mkdir -p "${WAVELET_CERTS_CACHE_DIR}"
 		chmod 700 "${WAVELET_CERTS_CACHE_DIR}"
 	fi
@@ -483,9 +506,10 @@ function runWavelet() {
 
 		if [ "${failCount}" -gt 10 ]; then
 			(
-				cd /db || exit 1
-				mkdir ".broken-${stopTime}"
-				mv * ".broken-${stopTime}"
+				set -e
+				cd /data/db
+				mkdir -p "/data/broken/date-${stopTime}"
+				mv * "/data/broken/date-${stopTime}/"
 				rm -f *
 			)
 			failCount='0'

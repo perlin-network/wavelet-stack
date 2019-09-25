@@ -32,7 +32,7 @@ services:
                         - WAVELET_BACKUP_DB=${WAVELET_BACKUP_DB-false}
                         - WAVELET_RESTART_ON_PEER_CHANGE=${WAVELET_RESTART_ON_PEER_CHANGE-true}
                 volumes:
-                        - wavelet_db:/db
+                        - wavelet_db:/data
                 depends_on:
                         - sync
                 deploy:
