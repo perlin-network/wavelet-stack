@@ -210,7 +210,7 @@ function start() {
 
 	case "${WAVELET_REBUILD_ON_START}" in
 		y|Y|yes|true|1)
-			./build-all-nodes "${stackName}"
+			./build-all-nodes "${stackName}" || return 1
 			;;
 	esac
 
