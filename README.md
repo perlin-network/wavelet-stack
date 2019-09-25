@@ -35,6 +35,11 @@ digitalocean.
 Import the configuration for a swarm by SSHing into one of the machines
 managed.
 
+### manage-swarm expand
+`manage-swarm expand <swarmName> [<count>]`
+
+Expands a swarm by _<count>_ hosts (default 1).
+
 ### manage-swarm destroy
 `manage-swarm destroy <swarmName>`
 

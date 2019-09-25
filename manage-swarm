@@ -14,10 +14,11 @@ fi
 
 function create_digitalocean() {
 	local name token count
-	local idx
+	local idx startIdx
 	local pids
 	local node1 ip
 	local arg nextArg docker_machine_args
+	local machineName
 
 	name="$1"
 	token="$2"
@@ -33,6 +34,7 @@ function create_digitalocean() {
 
 	docker_machine_args=()
 
+	startIndex='1'
 	nextArg=''
 	docker_machine_args=(
 		--digitalocean-tags "docker-swarm,${name}"
@@ -55,27 +57,39 @@ function create_digitalocean() {
 			--count)
 				nextArg='count'
 				;;
+			--startIndex)
+				nextArg='startIdx'
+				;;
 		esac
 	done
 
 	pids=()
 	for ((idx = 1; idx <= count; idx++)) {
-		docker-machine create --driver digitalocean --digitalocean-access-token "${token}" "${docker_machine_args[@]}" "${name}-${idx}" &
+		machineName="${name}-$[${startIdx} + ${idx} - 1]"
+		docker-machine create --driver digitalocean --digitalocean-access-token "${token}" "${docker_machine_args[@]}" "${machineName}" &
 		pids+=("$!")
 	}
 	wait "${pids[@]}"
 
 	node1="${name}-1"
 	ip="$(docker-machine inspect "${node1}" | jq -crM .Driver.IPAddress)" || return 1
-	docker-machine ssh "${node1}" docker swarm init --advertise-addr "${ip}" || return 1
+	if [ "${startIdx}" = '1' ]; then
+		docker-machine ssh "${node1}" docker swarm init --advertise-addr "${ip}" || return 1
+	fi
 
 	joinCommand="$(docker-machine ssh "${node1}" docker swarm join-token worker | grep ' --token ')"
-	for ((idx = 2; idx <= count; idx++)) {
-		docker-machine ssh "${name}-${idx}" "${joinCommand}" || return 1
+	for ((idx = 1; idx <= count; idx++)) {
+		machineName="${name}-$[${startIdx} + ${idx} - 1]"
+		if [ "${machineName}" = "${node1}" ]; then
+			continue
+		fi
+		docker-machine ssh "${name}-$[${startIdx} + ${idx} - 1]" "${joinCommand}" || return 1
 	}
 
-	mkdir -p "${swarmEnvDir}"
-	docker-machine env "${name}-1" > "${swarmEnvDir}/${name}"
+	if [ "${startIdx}" = '1' ]; then
+		mkdir -p "${swarmEnvDir}"
+		docker-machine env "${name}-1" > "${swarmEnvDir}/${name}"
+	fi
 
 	return 0
 }
@@ -103,6 +117,62 @@ function create() {
 	fi
 
 	create_${provider} "$@" || return "$?"
+
+	exportConfigToSwarm "${name}"
+
+	return 0
+}
+
+function expand_digitalocean() {
+	local name info startIdx count
+	local token size region
+
+	name="$1"
+	info="$2"
+	startIdx="$3"
+	count="$4"
+
+	token="$(echo "${info}" | jq -crM '.Driver.AccessToken')"
+	region="$(echo "${info}" | jq -crM '.Driver.Region')"
+	size="$(echo "${info}" | jq -crM '.Driver.Size')"
+
+	create_digitalocean "${name}" "${token}" --count "${count}" --size "${size}" --region "${region}" --startIndex "${startIdx}"
+
+	return 0
+}
+
+function expand() {
+	local name count
+	local provider
+	local info
+	local highestID nextID
+
+	name="$1"
+	count="$2"
+
+	if [ -z "${count}" ]; then
+		count='1'
+	fi
+
+	if [ -z "${name}" ]; then
+		echo "Usage: manage-swarm expand <swarmName> [<count>]" >&2
+
+		return 1
+	fi
+
+	swarmFile="${swarmEnvDir}/${name}"
+	if [ ! -f "${swarmFile}" ]; then
+		echo "Swarm does not exist: ${swarmFile}" >&2
+
+		return 1
+	fi
+
+	info="$(docker-machine inspect "${name}-1")"
+	highestID="$(docker-machine ls --filter NAME="${name}-[0-9]" -q | sed 's@^.*-@@' | sort -n | tail -n 1)"
+	nextID=$[${highestID} + 1]
+
+	provider="$(echo "${info}" | jq -crM '.DriverName')"
+	expand_${provider} "${name}" "${info}" "${nextID}" "${count}"
 
 	exportConfigToSwarm "${name}"
 
@@ -321,6 +391,7 @@ function import() {
 function usage() {
 	echo "Usage: manage-swarm create <provider> <swarmName> ..."
 	echo "       manage-swarm import <ip>"
+	echo "       manage-swarm expand <swarmName> [<count>]"
 	echo "       manage-swarm destroy <swarmName>"
 	echo "       manage-swarm status <swarmName>"
 	echo "       manage-swarm list"
@@ -341,7 +412,7 @@ fi
 swarmEnvDir="${configDir}/swarms"
 
 case "${action}" in
-	create|destroy|status|list|import|exportConfigToSwarm)
+	create|destroy|expand|status|list|import|exportConfigToSwarm)
 		"${action}" "$@"
 		exit "$?"
 		;;
