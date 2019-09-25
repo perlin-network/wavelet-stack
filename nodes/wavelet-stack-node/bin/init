@@ -488,6 +488,7 @@ function runWavelet() {
 				mv * ".broken-${stopTime}"
 				rm -f *
 			)
+			failCount='0'
 		fi
 
 		sleep 0.1
