@@ -311,6 +311,8 @@ function runWavelet() {
 	local port
 	local argNextArg
 	local needPort
+	local waveletAddArgs
+	local startTime stopTime failCount
 
 	port="$(getExternalPort)"
 	nextArg=''
@@ -466,8 +468,27 @@ function runWavelet() {
 			waveletAddArgs=( $(getSyncPeers) )
 		fi
 
+		startTime="$(date +%s)"
+
 		/wavelet --host "$(getExternalIP)" "$@" "${waveletAddArgs[@]}"
 		retval="$?"
+
+		stopTime="$(date +%s)"
+
+		if [ $[${stopTime} - ${startTime}] -lt 3 ]; then
+			failCount=$[${failCount} + 1]
+		else
+			failCount='0'
+		fi
+
+		if [ "${failCount}" -gt 10 ]; then
+			(
+				cd /db || exit 1
+				mkdir ".broken-${stopTime}"
+				mv * ".broken-${stopTime}"
+				rm -f *
+			)
+		fi
 
 		sleep 0.1
 	done
