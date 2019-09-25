@@ -122,7 +122,7 @@ function generateHAProxyRPCConfiguration() {
 		echo "    default_backend wavelet-rpc-back-${peer}"
 		echo ""
 		echo "backend wavelet-rpc-back-${peer}"
-		echo "    server wavelet-rpc-${peer} ${waveletAddr}:${waveletPort} check"
+		echo "    server wavelet-rpc-${peer} ${waveletAddr}:${waveletPort}"
 		echo ""
 	done
 
@@ -147,7 +147,7 @@ function generateHAProxyAPIConfiguration() {
 	for peer in $(getNode1); do
 		peer="$(echo "${peer}" | cut -f 1 -d :)"
 
-		echo "    server wavelet-api ${peer}:9000 check"
+		echo "    server wavelet-api ${peer}:9000"
 	done
 	echo ""
 
@@ -161,7 +161,7 @@ function generateHAProxyAPIConfiguration() {
 		for peer in $(getNode1); do
 			peer="$(echo "${peer}" | cut -f 1 -d :)"
 
-			echo "    server wavelet-api-https ${peer}:443 check"
+			echo "    server wavelet-api-https ${peer}:443"
 		done
 		echo ""
 	fi
@@ -181,7 +181,7 @@ function generateHAProxyAPIConfiguration() {
 		echo ""
 		echo "backend wavelet-api-back-${peer}"
 		echo "    mode http"
-		echo "    server wavelet-api-${peer} ${waveletAddr}:9000 check"
+		echo "    server wavelet-api-${peer} ${waveletAddr}:9000"
 		echo ""
 	done
 
