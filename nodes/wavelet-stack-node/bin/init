@@ -379,11 +379,12 @@ function runWavelet() {
 	# Migrate from the old storage schema of directly on the data
 	# volume to in a separate sub-directory
 	if [ ! -d /data/db ] ; then
+		mkdir /data/db || return 1
+
 		if [ -e /data/LOG -o -e /data/CURRENT ]; then
 			(
 				set -e
 				cd /data
-				mkdir db
 				mv * db
 
 				if [ -d .certs ]; then
