@@ -62,15 +62,74 @@ function maintainPeerRegistry() {
 	) &
 }
 
-function getNodePeers() {
-	local peers
+function serviceCIDR() {
+	local serviceName serviceIP serviceInterface serviceCIDR
 
-	peers="$(curl -sSL http://localhost:9000/ledger 2>/dev/null | jq -crM '.peers[].address' 2>/dev/null | sort -u)"
+	if [ -n "${cacheServiceCIDR}" ]; then
+		echo "${cacheServiceCIDR}"
+
+		return 0
+	fi
+
+	serviceName='wavelet'
+	serviceIP="$(getent hosts "${serviceName}" | awk '{ print $1; exit }')"
+	serviceInterface="$(ip -o route get "${serviceIP}" |  sed 's@^.* dev  *@@;s@ .*$@@')"
+	serviceCIDR="$(ip -o addr show dev "${serviceInterface}" | sed 's@^.* inet  *@@;s@ .*$@@')"
+	cacheServiceCIDR="${serviceCIDR}"
+
+	echo "${cacheServiceCIDR}"
+
+	return 0
+}
+
+function isSyncPeer() {
+	local peer
+	local servicePrefix serviceNetwork peerNetwork
+	local externalIP
+
+	peer="$1"
+
+	if [ "${WAVELET_NO_RPC}" = 'true' ]; then
+		# Verify the IP is an in the same range as the local nodes IP
+		servicePrefix="$(ipcalc -p "$(serviceCIDR)" | cut -f 2 -d =)"
+		serviceNetwork="$(ipcalc -n "$(serviceCIDR)" | cut -f 2 -d =)"
+		peerNetwork="$(ipcalc -n "${peer}/${servicePrefix}" | cut -f 2 -d =)"
+
+		if [ "${peerNetwork}" = "${serviceNetwork}" ]; then
+			return 0
+		fi
+	else
+		externalIP="$(getExternalIP | cut -f 1 -d :)"
+		if [ "${peer}" = "${externalIP}" ]; then
+			return 0
+		fi
+	fi
+
+	return 1
+}
+
+function getNodePeers() {
+	local peers filteredPeers
+	local peer
+
+	peers=( $(curl -sSL http://localhost:9000/ledger 2>/dev/null | jq -crM '.peers[].address' 2>/dev/null | sort -u) )
 	if [ "${peers}" = 'null' ]; then
 		peers=''
 	fi
 
-	echo "${peers}"
+	# Filter out all peers that are external to the cluster
+	cacheExternalMappingData
+	filteredPeers=()
+	for peer in "${peers[@]}"; do
+		if ! isSyncPeer "$(echo "${peer}" | cut -f 1 -d :)"; then
+			continue
+		fi
+		filteredPeers+=("${peer}")
+	done
+
+	echo "${filteredPeers[*]}"
+
+	return 0
 }
 
 function getSyncPeers() {
@@ -313,6 +372,9 @@ function runWavelet() {
 	local needPort
 	local waveletAddArgs
 	local startTime stopTime failCount
+
+	# Compute the serviceCIDR and cache it, for future calls
+	serviceCIDR >/dev/null 2>/dev/null
 
 	# Migrate from the old storage schema of directly on the data
 	# volume to in a separate sub-directory
