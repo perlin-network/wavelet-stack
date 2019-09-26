@@ -405,11 +405,12 @@ function runWavelet() {
 			removeErrors='0'
 			addErrors='0'
 
-			removeErrorThreshold='10'
 			if [ "${haveConnectAPI}" = 'true' ]; then
 				addErrorThreshold='1000'
+				removeErrorThreshold='100'
 			else
 				addErrorThreshold='1'
+				removeErrorThreshold='10'
 			fi
 		fi
 
