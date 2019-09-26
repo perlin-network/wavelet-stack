@@ -277,9 +277,9 @@ function status() {
 
 	echo '----'
 	if [ "$1" = 'watch' ]; then
-		watch docker stack ps "${stackName}"
+		watch --differences=p -n 0.5 docker stack ps --filter 'desired-state=Running' "${stackName}"
 	else
-		docker stack ps "${stackName}"
+		docker stack ps --filter 'desired-state=Running' "${stackName}"
 	fi
 
 	return 0
