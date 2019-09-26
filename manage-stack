@@ -276,7 +276,11 @@ function status() {
 	fi
 
 	echo '----'
-	docker stack ps "${stackName}"
+	if [ "$1" = 'watch' ]; then
+		watch docker stack ps "${stackName}"
+	else
+		docker stack ps "${stackName}"
+	fi
 
 	return 0
 }
@@ -750,7 +754,7 @@ case "${action}" in
 		exit "$?"
 		;;
 	status|'')
-		status
+		status "$@"
 		exit "$?"
 		;;
 	attach|shell|logs|benchmark|nobenchmark|cleanVolumes)
