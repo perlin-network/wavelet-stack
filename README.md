@@ -85,7 +85,7 @@ Configuration options are:
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}
        manage-stack [-s <stackName>] benchmark [<count>]
        manage-stack [-s <stackName>] nobenchmark
-       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>
+       manage-stack [-s <stackName>] {attach|shell|logs|debug-wavelet} <nodeId>
        manage-stack [-s <stackName>] {config|edit-config}
        manage-stack [-s <stackName>] dump-db <nodeId> <outputFile>
        manage-stack [-s <stackName>] cp <src>... <dest>
@@ -157,6 +157,12 @@ nodeId parameter.
 
 Get the logs for a given node.  See `manage-stack attach` for the format of the
 nodeId parameter.
+
+### manage-stack debug-wavelet
+`manage-stack debug-wavelet <nodeId>`
+
+Attach the "delve" debugger to the wavelet process of a given node.  See `manage-stack attach`
+for the format of the nodeId parameter.
 
 ### manage-stack config
 `manage-stack config`

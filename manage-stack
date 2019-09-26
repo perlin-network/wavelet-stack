@@ -370,7 +370,13 @@ function attach() {
 
 function shell() {
 	local nodeID taskID containerID
+	local allocateTty
 	local args
+
+	allocateTty='false'
+	if [ "${_internalShellAllocateTTY}" = 'true' ]; then
+		allocateTty='true'
+	fi
 
 	nodeID="$1"
 	shift
@@ -384,13 +390,17 @@ function shell() {
 	containerID="$(containerIDFromTaskID "${taskID}")" || return 1
 	setDockerMachineForTaskID "${taskID}"
 
-	args=()
 	if [ "$#" = '0' ]; then
 		if [ "${nodeID}" = 'sync' ]; then
 			set -- sh
 		else
 			set -- bash
 		fi
+		allocateTty='true'
+	fi
+
+	args=()
+	if [ "${allocateTty}" = 'true' ]; then
 		args+=(-t)
 	fi
 
@@ -413,11 +423,26 @@ function logs() {
 	docker service logs "$@" "${taskID}"
 }
 
+function debugWavelet() {
+	local nodeID taskID containerID
+
+	nodeID="$1"
+	shift
+
+	if [ -z "${nodeID}" ]; then
+		echo "Usage: manage-stack [-s <stackName>] debug-wavelet <nodeId>" >&2
+		return 1
+	fi
+
+	_internalShellAllocateTTY='true'
+	shell "${nodeID}" bash -c '/opt/perlin/bin/dlv attach "$(pgrep -x /wavelet)"'
+}
+
 function usage() {
 	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}"
 	echo "       manage-stack [-s <stackName>] benchmark [<count>]"
 	echo "       manage-stack [-s <stackName>] nobenchmark"
-	echo "       manage-stack [-s <stackName>] {attach|shell|logs} <nodeId>"
+	echo "       manage-stack [-s <stackName>] {attach|shell|logs|debug-wavelet} <nodeId>"
 	echo "       manage-stack [-s <stackName>] {config|edit-config}"
 	echo "       manage-stack [-s <stackName>] dump-db <nodeId> <outputFile>"
 	echo "       manage-stack [-s <stackName>] cp <src>... <dest>"
@@ -744,6 +769,10 @@ case "${action}" in
 		;;
 	restart|restart-wavelet)
 		runOnService wavelet pkill -9 -x /wavelet
+		;;
+	debug-wavelet)
+		debugWavelet "$@"
+		exit "$?"
 		;;
 	reset)
 		stop || exit "$?"
