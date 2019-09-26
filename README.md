@@ -71,7 +71,7 @@ Configuration options are:
   5. `WAVELET_RICH_WALLETS` - Number of Rich wallets to create if generating the Genesis block (that is, if `WAVELET_GENEISIS` is not supplied; defaults to `3`)
   6. `WAVELET_SNOWBALL_K` - Wavelet Snowball K
   7. `WAVELET_SNOWBALL_BETA` - Wavelet Snowball Beta
-  8. `WAVELET_MEMORY_MAX` - Max amount of memory to terminate the node after
+  8. `WAVELET_MEMORY_MAX` - Max amount of memory to terminate the node after (in MiB)
   9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed
   10. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
   11. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
