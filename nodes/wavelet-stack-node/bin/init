@@ -145,7 +145,7 @@ function getSyncPeers() {
 
 	if [ "${WAVELET_NO_RPC}" = 'true' ]; then
 		curl -SsL "${peersURL}" 2>/dev/null | \
-			jq -crM '.node.nodes[] | select(.key | contains("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null | \
+			jq -crM '.node.nodes[] | select(.key | endswith("/peers/'"${peerID}"'") | not) | .value' 2>/dev/null | \
 			sort -u | \
 			grep -v '^null$'
 	else
