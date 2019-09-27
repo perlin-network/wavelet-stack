@@ -36,6 +36,9 @@ function volumesExist() {
 
 			docker volume list -q | egrep "^${stackName}_(wavelet|sync)_wavelet_db_instance_" >/dev/null
 		) && retval='0'
+		if [ "${retval}" = '0' ]; then
+			break
+		fi
 	done
 
 	return "${retval}"
