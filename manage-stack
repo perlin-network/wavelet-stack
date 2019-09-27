@@ -217,7 +217,7 @@ function start() {
 			;;
 	esac
 
-	docker stack deploy --with-registry-auth -c "${configFile}" "${stackName}"
+	docker stack deploy --prune --with-registry-auth -c "${configFile}" "${stackName}"
 	pushConfigToEtcd
 
 	if [ "${#toDelete[@]}" != '0' ]; then
