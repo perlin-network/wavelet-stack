@@ -71,7 +71,7 @@ function serviceCIDR() {
 		return 0
 	fi
 
-	serviceName='wavelet'
+	serviceName='sync'
 	serviceIP="$(getent hosts "${serviceName}" | awk '{ print $1; exit }')"
 	serviceInterface="$(ip -o route get "${serviceIP}" |  sed 's@^.* dev  *@@;s@ .*$@@')"
 	serviceCIDR="$(ip -o addr show dev "${serviceInterface}" | sed 's@^.* inet  *@@;s@ .*$@@')"
@@ -118,7 +118,14 @@ function getNodePeers() {
 	fi
 
 	# Filter out all peers that are external to the cluster
-	cacheExternalMappingData
+	if [ "${WAVELET_NO_RPC}" != 'true' ]; then
+		cacheExternalMappingData
+
+		# Compute the serviceCIDR and cache it, for future calls
+		unset cacheServiceCIDR
+		serviceCIDR >/dev/null 2>/dev/null
+	fi
+
 	filteredPeers=()
 	for peer in "${peers[@]}"; do
 		if ! isSyncPeer "$(echo "${peer}" | cut -f 1 -d :)"; then
@@ -372,9 +379,6 @@ function runWavelet() {
 	local needPort
 	local waveletAddArgs
 	local startTime stopTime failCount
-
-	# Compute the serviceCIDR and cache it, for future calls
-	serviceCIDR >/dev/null 2>/dev/null
 
 	# Migrate from the old storage schema of directly on the data
 	# volume to in a separate sub-directory
