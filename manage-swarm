@@ -34,7 +34,7 @@ function create_digitalocean() {
 
 	docker_machine_args=()
 
-	startIndex='1'
+	startIdx='1'
 	nextArg=''
 	docker_machine_args=(
 		--digitalocean-tags "docker-swarm,${name}"
@@ -78,6 +78,10 @@ function create_digitalocean() {
 	fi
 
 	joinCommand="$(docker-machine ssh "${node1}" docker swarm join-token worker | grep ' --token ')"
+	if [ -z "${joinCommand}" ]; then
+		echo "Failed to create join command" >&2
+		return 1
+	fi
 	for ((idx = 1; idx <= count; idx++)) {
 		machineName="${name}-$[${startIdx} + ${idx} - 1]"
 		if [ "${machineName}" = "${node1}" ]; then
@@ -131,12 +135,13 @@ function expand_digitalocean() {
 	info="$2"
 	startIdx="$3"
 	count="$4"
+	shift; shift; shift; shift
 
 	token="$(echo "${info}" | jq -crM '.Driver.AccessToken')"
 	region="$(echo "${info}" | jq -crM '.Driver.Region')"
 	size="$(echo "${info}" | jq -crM '.Driver.Size')"
 
-	create_digitalocean "${name}" "${token}" --count "${count}" --size "${size}" --region "${region}" --startIndex "${startIdx}"
+	create_digitalocean "${name}" "${token}" --count "${count}" --size "${size}" --region "${region}" --startIndex "${startIdx}" "$@"
 
 	return 0
 }
@@ -149,13 +154,14 @@ function expand() {
 
 	name="$1"
 	count="$2"
+	shift; shift
 
 	if [ -z "${count}" ]; then
 		count='1'
 	fi
 
 	if [ -z "${name}" ]; then
-		echo "Usage: manage-swarm expand <swarmName> [<count>]" >&2
+		echo "Usage: manage-swarm expand <swarmName> [<count> [<args>...]]" >&2
 
 		return 1
 	fi
@@ -172,7 +178,7 @@ function expand() {
 	nextID=$[${highestID} + 1]
 
 	provider="$(echo "${info}" | jq -crM '.DriverName')"
-	expand_${provider} "${name}" "${info}" "${nextID}" "${count}"
+	expand_${provider} "${name}" "${info}" "${nextID}" "${count}" "$@"
 
 	exportConfigToSwarm "${name}"
 
