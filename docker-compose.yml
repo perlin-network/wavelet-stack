@@ -11,6 +11,8 @@ services:
                         - "80"
                         - "443:443"
                         - "9000-9047"
+                        - "3000:3000"
+                        - "3001-3047"
                         - "3000-3047"
                 environment:
                         - WAVELET_API_HOST=${WAVELET_API_HOST}

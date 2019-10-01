@@ -183,7 +183,19 @@ function start() {
 			tmp="$(mktemp)" || exit 1
 			toDelete+=("${tmp}")
 
-			grep -v ' "3000-' "${configFile}" > "${tmp}"
+			grep -v ' "300[01]-' "${configFile}" | grep -v ' "3000:3000"' > "${tmp}"
+
+			configFile="${tmp}"
+			;;
+		*)
+			tmp="$(mktemp)" || exit 1
+			toDelete+=("${tmp}")
+
+			if [ -n "${WAVELET_RPC_PORT}" ]; then
+				grep -v ' "3000-' "${configFile}" | sed 's@ "3000:3000"@ "'"${WAVELET_RPC_PORT}"':3000"@' > "${tmp}"
+			else
+				grep -v ' "3001-' "${configFile}" | grep -v ' "3000:3000"' > "${tmp}"
+			fi
 
 			configFile="${tmp}"
 			;;
