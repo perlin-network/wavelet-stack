@@ -545,6 +545,10 @@ function runWavelet() {
 		done &
 	fi
 
+	# Disable the auto-updater for our internal nodes
+	WAVELET_UPDATE_URL=''
+	export WAVELET_UPDATE_URL
+
 	# Run the wavelet process in a loop so that exiting just
 	# causes it to reload, unless a special marker file
 	# exists
