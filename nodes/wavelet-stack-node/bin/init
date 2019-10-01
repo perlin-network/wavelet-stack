@@ -508,23 +508,27 @@ function runWavelet() {
 					fi
 				fi
 			done
-			for newPeer in "${newPeers[@]}"; do
-				peerAlreadyPresent='false'
-				for oldPeer in "${oldPeers[@]}"; do
-					if [ "${oldPeer}" = "${newPeer}" ]; then
-						peerAlreadyPresent='true'
-						break
+
+			if [ "${#oldPeers[@]}" -lt 3 ]; then
+				for newPeer in "${newPeers[@]}"; do
+					peerAlreadyPresent='false'
+					for oldPeer in "${oldPeers[@]}"; do
+						if [ "${oldPeer}" = "${newPeer}" ]; then
+							peerAlreadyPresent='true'
+							break
+						fi
+					done
+
+					if [ "${peerAlreadyPresent}" = 'false' ]; then
+						echo "  Adding: ${newPeer}" >&2
+						if addWaveletPeer "${newPeer}"; then
+							addErrors='0'
+						else
+							addErrors=$[$addErrors + 1]
+						fi
 					fi
 				done
-				if [ "${peerAlreadyPresent}" = 'false' ]; then
-					echo "  Adding: ${newPeer}" >&2
-					if addWaveletPeer "${newPeer}"; then
-						addErrors='0'
-					else
-						addErrors=$[$addErrors + 1]
-					fi
-				fi
-			done
+			fi
 
 			# If there is a continious stream of errors coming from Wavelet
 			# then kill the process and let it sort itself out
