@@ -48,7 +48,7 @@ function getNode1() {
 
 	peer="$(getPeers | sort -n | head -n 1)"
 
-	value="$(curl -sS "http://sync:2379/v2/keys/peers/${peer}" | jq -crM .node.value)"
+	value="$(curl -sS "http://sync:2379/v2/keys/peers/${peer}" | jq -crM .node.value | head -n 1)"
 	if [ "${value}" = 'null' ]; then
 		value=''
 	fi
@@ -63,7 +63,7 @@ function getMappingData() {
 	peer="$1"
 	field="$2"
 
-	data="$(echo "${externalMappingCache}" | jq -crM '.node.nodes[] | select(.key == "/mapping/'"${peer}"'") | .value' 2>/dev/null)"
+	data="$(echo "${externalMappingCache}" | jq -crM '.node.nodes[] | select(.key == "/mapping/'"${peer}"'") | .value' 2>/dev/null | head -n 1)"
 
 	echo "${data}" | cut -f "${field}" -d /
 }
@@ -85,7 +85,7 @@ function getPeerWaveletAddr() {
 
 	peer="$1"
 
-	data="$(echo "${peersCache}" | jq -crM '.node.nodes[] | select(.key == "/peers/'"${peer}"'") | .value')"
+	data="$(echo "${peersCache}" | jq -crM '.node.nodes[] | select(.key == "/peers/'"${peer}"'") | .value' | head -n 1)"
 
 	echo "${data}" | sed 's@:[^:]*$@@'
 }

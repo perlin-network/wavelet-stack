@@ -242,7 +242,7 @@ function getExternalPort() {
 	else
 		cacheExternalMappingData
 
-		port="$(getExternalMappingData | cut -f 2 -d /)"
+		port="$(getExternalMappingData | cut -f 2 -d / | sort -n | head -n 1)"
 	fi
 
 	if [ -z "${port}" ]; then
