@@ -129,6 +129,7 @@ function getNodePeers() {
 	filteredPeers=()
 	for peer in "${peers[@]}"; do
 		if ! isSyncPeer "$(echo "${peer}" | cut -f 1 -d :)"; then
+			#DEBUG#echo "  Skipping ${peer} (external; not in same subnet as $cacheServiceCIDR)" >&2
 			continue
 		fi
 		filteredPeers+=("${peer}")
@@ -485,9 +486,9 @@ function runWavelet() {
 		newPeers=( $(getSyncPeers) )
 
 		if [ "${newPeers[*]}" != "${oldPeers[*]}" ]; then
-			echo "PEERS DIFFER:" >&2
-			echo "  OLD: ${oldPeers[*]}" >&2
-			echo "  NEW: ${newPeers[*]}" >&2
+			#DEBUG#echo "PEERS DIFFER:" >&2
+			#DEBUG#echo "  OLD: ${oldPeers[*]}" >&2
+			#DEBUG#echo "  NEW: ${newPeers[*]}" >&2
 
 			for oldPeer in "${oldPeers[@]}"; do
 				peerStillValid='false'
