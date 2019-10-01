@@ -48,6 +48,10 @@ function benchmarkRunning() {
 	local replicas
 
 	replicas="$(docker service inspect "${stackName}_benchmark" | jq '.[].Spec.Mode.Replicated.Replicas')"
+	if [ -z "${replicas}" ]; then
+		replicas='0'
+	fi
+
 	if [ "${replicas}" = '0' ]; then
 		return 1
 	else
