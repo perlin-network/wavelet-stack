@@ -607,7 +607,7 @@ function duplicateStack() {
 	fi
 
 	mkdir -p "$(dirname "${newStackEnvFile}")"
-	dumpConfig | grep -v '^WAVELET_API_PORT=' > "${newStackEnvFile}"
+	dumpConfig | egrep -v '^(WAVELET_API_PORT|WAVELET_RPC_PORT)=' > "${newStackEnvFile}"
 
 	retval='0'
 
@@ -771,6 +771,7 @@ fi
 export REGISTRY WAVELET_BENCHMARK_NODES WAVELET_GENESIS WAVELET_KEYS WAVELET_NODES WAVELET_RICH_WALLETS
 export WAVELET_SNOWBALL_K WAVELET_SNOWBALL_BETA WAVELET_MEMORY_MAX WAVELET_NO_RPC WAVELET_TAG
 export WAVELET_API_HOST WAVELET_API_ACME_ACCOUNT_KEY
+export WAVELET_API_PORT WAVELET_RPC_PORT
 export WAVELET_BACKUP_DB WAVELET_RESTART_ON_PEER_CHANGE
 
 case "${action}" in
