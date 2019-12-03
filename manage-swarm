@@ -135,6 +135,8 @@ function create_digitalocean() {
 		docker-machine env "${name}-1" > "${swarmEnvDir}/${name}"
 	fi
 
+	echo "Complete !"
+
 	return 0
 }
 
@@ -181,7 +183,7 @@ function expand_digitalocean() {
 	region="$(echo "${info}" | jq -crM '.Driver.Region')"
 	size="$(echo "${info}" | jq -crM '.Driver.Size')"
 
-	create_digitalocean "${name}" "${token}" --count "${count}" --size "${size}" --region "${region}" --startIndex "${startIdx}" "$@"
+	create_digitalocean "${name}" "${token}" --count "${count}" --size "${size}" --region "${region}" --startIndex "${startIdx}" "$@" || return $?
 
 	return 0
 }
@@ -218,7 +220,7 @@ function expand() {
 	nextID=$[${highestID} + 1]
 
 	provider="$(echo "${info}" | jq -crM '.DriverName')"
-	expand_${provider} "${name}" "${info}" "${nextID}" "${count}" "$@"
+	expand_${provider} "${name}" "${info}" "${nextID}" "${count}" "$@" || return $?
 
 	exportConfigToSwarm "${name}"
 
