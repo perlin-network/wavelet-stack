@@ -12,12 +12,46 @@ if [ ! -x "$(command -v docker)" ]; then
 	exit 1
 fi
 
+function create_digitalocean_ask() {
+	local what
+	local apiKey
+	local values value
+
+	what="$1"
+	apiKey="$2"
+
+	echo 'Loading...' >&3
+
+	case "${what}" in
+		size)
+			values=($(curl -sSL -X GET -H "Content-Type: application/json" -H "Authorization: Bearer ${apiKey}" "https://api.digitalocean.com/v2/sizes"  | jq -crM '.sizes[] | .slug' | sort))
+			;;
+		region)
+			values=($(curl -sSL -X GET -H "Content-Type: application/json" -H "Authorization: Bearer ${apiKey}" "https://api.digitalocean.com/v2/regions"  | jq -crM '.regions[] | .slug' | sort))
+			;;
+		*)
+			echo "internal error: unable to ask about ${what}" >&2
+			return 1
+			;;
+	esac
+
+	echo "Please select one of the following for the ${what}:" >&3
+	select value in "${values[@]}"; do
+		if [ -n "${value}" ]; then
+			echo "${value}"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
 function create_digitalocean() {
 	local name token count
 	local idx startIdx
 	local pids
 	local node1 ip
-	local arg nextArg docker_machine_args
+	local arg nextArg nextArgName docker_machine_args
 	local machineName
 
 	name="$1"
@@ -42,6 +76,11 @@ function create_digitalocean() {
 	for arg in "$@"; do
 		if [ -n "${nextArg}" ]; then
 			if [ "${nextArg}" = '+' ]; then
+				if [ "${arg}" = 'ask' ]; then
+					exec 3>&1
+					arg="$(create_digitalocean_ask "${nextArgName}" "${token}")" || return 1
+					exec 3>&-
+				fi
 				docker_machine_args+=("${arg}")
 			else
 				eval "${nextArg}="'"${arg}"'
@@ -53,6 +92,7 @@ function create_digitalocean() {
 			--size|--region)
 				docker_machine_args+=("--digitalocean-${arg:2}")
 				nextArg='+'
+				nextArgName="${arg:2}"
 				;;
 			--count)
 				nextArg='count'
