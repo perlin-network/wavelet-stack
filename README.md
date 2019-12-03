@@ -27,13 +27,26 @@ Docker Machine.
 `manage-swarm create <provider> <swarmName> ...`
 
 Creates a new Swarm.  Currently the only provider supported is
-digitalocean.
+digitalocean.  The Swarm will be named _<swarmName>_.  This name
+will be the basis of serveral [docker machine](https://docs.docker.com/machine/)
+hosts added to the local system.
+
+`manage-swarm create digitalocean <swarmName> <apiToken> [--count <n>] [--size <n>] [--region <name>]`
+
+Creates a new Swarm on DigitalOcean using the specified [API Token](https://www.digitalocean.com/docs/api/create-personal-access-token/).
+The `--count` argument specifies the number of hosts to create.  The `--size`
+argument specifies the DigitalOcean droplet size to use for each host.  The
+`--region` argument specifies the DigitalOcean region name to place all the
+droplets in.  You may specify the value "`ask`" for the arguments `--size`
+and `--region` to be interactively prompted for a list of options.
 
 ### manage-swarm import
 `manage-swarm import <ip>`
 
 Import the configuration for a swarm by SSHing into one of the machines
-managed.
+managed.  Another administrative user must have already added your SSH
+key to the machine's `~/.ssh/authorized_keys` file.  This can be done
+using `docker-machine ssh` to login to the system.
 
 ### manage-swarm expand
 `manage-swarm expand <swarmName> [<count> [...]]`
@@ -54,14 +67,14 @@ Get the status of a swarm.
 ### manage-swarm list
 `manage-swarm list`
 
-List known swarms.
+List known swarms from the local configuration database.
 
 ## manage-stack
-The `manage-stack` tool is the most useful tool.  It helps manage a specified
+The `manage-stack` tool is the most commonly used tool.  It helps manage a specified
 stack.
 
 Stack configurations are stored in `./config/stacks/` locally, or in `/etc/wavelet-stack`
-on the Docker Machine host if using a remote Swarm.
+on the Docker Machine host if using a Swarm.
 
 Configuration options are:
 
@@ -73,7 +86,7 @@ Configuration options are:
   6. `WAVELET_SNOWBALL_K` - Wavelet Snowball K
   7. `WAVELET_SNOWBALL_BETA` - Wavelet Snowball Beta
   8. `WAVELET_MEMORY_MAX` - Max amount of memory to terminate the node after (in MiB)
-  9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed (if not specified, random port)
+  9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed (if not specified as true, random port)
   10. `WAVELET_RPC_PORT` - Port to listen for the first node for RPC requests
   11. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
   12. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
@@ -83,6 +96,7 @@ Configuration options are:
   16. `WAVELET_BACKUP_DB` - Boolean to indicate whether database backups are automatically taken for wavelet nodes
   17. `WAVELET_BUILD_DIR` - Directory to rebuild the "wavelet" container from when building all images using `build-all-nodes`
   18. `WAVELET_RESTART_ON_PEER_CHANGE` - Boolean to indicate whether wavelet should be restarted if peers change (defaults to true)
+  19. `WAVELET_REBUILD_ON_START` - Indicate that the `build-all-nodes` script should be run for the given stack when it is started (defaults to false)
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}
@@ -214,3 +228,74 @@ will be crated from `REGISTRY/wavelet:WAVELET_TAG` and the files in the
 `nodes/wavelet-stack-node` directory.
 
 If `WAVELET_TAG` is not specified it will default to `latest`.
+
+## Examples
+### Create a new Swarm
+
+```
+$ ./manage-swarm create digitalocean demoswarm <apiKey> --size ask --region ask --count 3
+Loading...
+Please select one of the following for the size:
+1) 1gb             6) c-2           11) m-1vcpu-8gb   16) s-2vcpu-2gb
+2) 2gb             7) c-4           12) m-2vcpu-16gb  17) s-2vcpu-4gb
+3) 4gb             8) g-2vcpu-8gb   13) s-1vcpu-1gb   18) s-3vcpu-1gb
+4) 512mb           9) gd-2vcpu-8gb  14) s-1vcpu-2gb   19) s-4vcpu-8gb
+5) 8gb            10) m-16gb        15) s-1vcpu-3gb   20) s-6vcpu-16gb
+#? 17
+Loading...
+Please select one of the following for the region:
+1) ams3  3) fra1  5) nyc1  7) sfo2  9) tor1
+2) blr1  4) lon1  6) nyc3  8) sgp1
+#? 5
+Creating machine...
+Creating machine...
+Creating machine...
+...
+Complete !
+$
+```
+
+### Import an existing Swarm
+
+
+### Create a new Stack
+
+```
+$ ./manage-stack -s demoswarm-demostack edit-config
+REGISTRY=rkeene
+WAVELET_BUILD_DIR=/home/rkeene/devel/perlin-dev/wavelet-clean
+WAVELET_REBUILD_ON_START=yes
+WAVELET_CLEAN_VOLUMES=no
+WAVELET_MEMORY_MAX=2048
+WAVELET_NODES=3
+WAVELET_NO_RPC=true
+WAVELET_SNOWBALL_BETA=150
+WAVELET_SNOWBALL_K=2
+WAVELET_TAG=benchmark
+:wq
+$ docker login
+$ ./manage-stack -s demoswarm-demostack start
+...
+Creating network demoswarm-demostack_default
+Creating service demoswarm-demostack_wavelet
+Creating service demoswarm-demostack_benchmark
+Creating service demoswarm-demostack_sync
+Creating service demoswarm-demostack_loadbalancer
+$ ./manage-stack -s demoswarm-demostack status
+demoswarm-demostack (on demoswarm):
+  - RUNNING
+  - VOLUMES
+  - API (main): http://<ip>:30000/
+  - API (all): http://<ip>:30001/
+  - RPC: disabled
+----
+ID                  NAME                                 IMAGE                                 NODE                DESIRED STATE       CURRENT STATE            ERROR               PORTS
+than2lo5h0jk        demoswarm-demostack_loadbalancer.1   rkeene/wavelet-stack-lb:latest        demoswarm-2         Running             Running 40 seconds ago
+xzlxbn18rvul        demoswarm-demostack_sync.1           elcolio/etcd:latest                   demoswarm-1         Running             Running 47 seconds ago
+pj6rx1eznf0g        demoswarm-demostack_wavelet.1        rkeene/wavelet-stack-node:benchmark   demoswarm-2         Running             Running 14 seconds ago
+jwbjqznbqyh6        demoswarm-demostack_wavelet.2        rkeene/wavelet-stack-node:benchmark   demoswarm-3         Running             Running 13 seconds ago
+khog9vro233v        demoswarm-demostack_wavelet.3        rkeene/wavelet-stack-node:benchmark   demoswarm-1         Running             Running 18 seconds ago
+$
+```
+
+(n.b., if you see the error "scp: /etc/wavelet-stack/demoswarm-demostack: No such file or directory" when creating your first stack on a swarm, it may be safely ignored.)
