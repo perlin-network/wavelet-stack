@@ -111,6 +111,12 @@ function isSyncPeer() {
 function getNodePeers() {
 	local peers filteredPeers
 	local peer
+	local filter
+
+	filter='true'
+	if [ "$1" = '--nofilter' ]; then
+		filter='false'
+	fi
 
 	peers=( $(curl -sSL http://localhost:9000/ledger 2>/dev/null | jq -crM '.peers[].address' 2>/dev/null | sort -u) )
 	if [ "${peers}" = 'null' ]; then
@@ -128,9 +134,11 @@ function getNodePeers() {
 
 	filteredPeers=()
 	for peer in "${peers[@]}"; do
-		if ! isSyncPeer "$(echo "${peer}" | cut -f 1 -d :)"; then
-			#DEBUG#echo "  Skipping ${peer} (external; not in same subnet as $cacheServiceCIDR)" >&2
-			continue
+		if [ "${filter}" = 'true' ]; then
+			if ! isSyncPeer "$(echo "${peer}" | cut -f 1 -d :)"; then
+				#DEBUG#echo "  Skipping ${peer} (external; not in same subnet as $cacheServiceCIDR)" >&2
+				continue
+			fi
 		fi
 		filteredPeers+=("${peer}")
 	done
@@ -483,6 +491,7 @@ function runWavelet() {
 		fi
 
 		oldPeers=( $(getNodePeers) )
+		curPeers=( $(getNodePeers --nofilter) )
 		newPeers=( $(getSyncPeers) )
 
 		if [ "${newPeers[*]}" != "${oldPeers[*]}" ]; then
@@ -509,7 +518,7 @@ function runWavelet() {
 				fi
 			done
 
-			if [ "${#oldPeers[@]}" -lt 3 ]; then
+			if [ "${#curPeers[@]}" -lt $[${WAVELET_SNOWBALL_K} + 1] ]; then
 				for newPeer in "${newPeers[@]}"; do
 					peerAlreadyPresent='false'
 					for oldPeer in "${oldPeers[@]}"; do
