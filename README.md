@@ -36,9 +36,10 @@ Import the configuration for a swarm by SSHing into one of the machines
 managed.
 
 ### manage-swarm expand
-`manage-swarm expand <swarmName> [<count>]`
+`manage-swarm expand <swarmName> [<count> [...]]`
 
-Expands a swarm by _<count>_ hosts (default 1).
+Expands a swarm by _<count>_ hosts (default 1).  Takes the same arguments as
+`manage-swarm create` for the provider the swarm was created on.
 
 ### manage-swarm destroy
 `manage-swarm destroy <swarmName>`
@@ -72,14 +73,16 @@ Configuration options are:
   6. `WAVELET_SNOWBALL_K` - Wavelet Snowball K
   7. `WAVELET_SNOWBALL_BETA` - Wavelet Snowball Beta
   8. `WAVELET_MEMORY_MAX` - Max amount of memory to terminate the node after (in MiB)
-  9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed
-  10. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
-  11. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
-  12. `WAVELET_API_HOST` - Hostname, if supplied, HTTPS support is enabled on port 443/tcp
-  13. `WAVELET_API_ACME_ACCOUNT_KEY` - PEM encoded ACME account key for autocert.  Generally if `WAVELET_API_HOST` is provided, this should be provided also.
-  14. `WAVELET_BACKUP_DB` - Boolean to indicate whether database backups are automatically taken for wavelet nodes
-  15. `WAVELET_BUILD_DIR` - Directory to rebuild the "wavelet" container from when building all images using `build-all-nodes`
-  16. `WAVELET_RESTART_ON_PEER_CHANGE` - Boolean to indicate whether wavelet should be restarted if peers change (defaults to true)
+  9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed (if not specified, random port)
+  10. `WAVELET_RPC_PORT` - Port to listen for the first node for RPC requests
+  11. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
+  12. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
+  13. `WAVELET_API_HOST` - Hostname, if supplied, HTTPS support is enabled on port 443/tcp
+  14. `WAVELET_API_PORT` - Port to listen on for API requests (HTTP-only) (if not specified, random port)
+  15. `WAVELET_API_ACME_ACCOUNT_KEY` - PEM encoded ACME account key for autocert.  Generally if `WAVELET_API_HOST` is provided, this should be provided also.
+  16. `WAVELET_BACKUP_DB` - Boolean to indicate whether database backups are automatically taken for wavelet nodes
+  17. `WAVELET_BUILD_DIR` - Directory to rebuild the "wavelet" container from when building all images using `build-all-nodes`
+  18. `WAVELET_RESTART_ON_PEER_CHANGE` - Boolean to indicate whether wavelet should be restarted if peers change (defaults to true)
 
 ```
 Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}
