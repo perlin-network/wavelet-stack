@@ -232,6 +232,9 @@ If `WAVELET_TAG` is not specified it will default to `latest`.
 ## Examples
 ### Create a new Swarm
 
+The following example creates a Docker Swarm on 3 newly provisioned Droplets on DigitalOcean.  It prompts
+the user for the size of those droplets and which region they will be provisioned in.
+
 ```
 $ ./manage-swarm create digitalocean demoswarm <apiKey> --size ask --region ask --count 3
 Loading...
@@ -255,10 +258,11 @@ Complete !
 $
 ```
 
-### Import an existing Swarm
-
-
 ### Create a new Stack
+
+The following example creates a Stack named "`demoswarm-demostack`" on the Swarm named "`demoswarm`".  By default,
+Stacks are created on Swarms named before the first dash (`-`).  This can be changed by creating a local stack configuration
+in `config/stacks/<stackName>` but every user of the stack will need that local configuration so it is not recommended.
 
 ```
 $ ./manage-stack -s demoswarm-demostack edit-config
@@ -299,6 +303,41 @@ $
 ```
 
 (n.b., if you see the error "scp: /etc/wavelet-stack/demoswarm-demostack: No such file or directory" when creating your first stack on a swarm, it may be safely ignored.)
+
+### Import an existing Swarm
+
+The following example imports a Swarm by SSH'ing as root the the IP specified and downloading the configuration
+into the user's home directory for Docker Machine as well creating `config/swarms/<swarmName>`.  Another user
+of the swarm must have previously configured the SSH `~/.ssh/authorized_keys` on the host before it can be imported.
+
+```
+$ ./manage-swarm import <ip>
+wavelet-swarm.tar.gz                                                                            100%   15KB 244.4KB/s   00:00    
+$ ./manage-swarm list
+demoswarm
+testnet
+tradenet
+$ ./manage-swarm status demoswarm
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS      ENGINE VERSION
+uq5lc5qh9iahucmlrlz96kudo *   demoswarm-1         Ready               Active              Leader              19.03.5
+p61qvckkxyp6cgqs4xvs36c50     demoswarm-2         Ready               Active                                  19.03.5
+pm3rzbv5qlzy4l6tpxlqd3b22     demoswarm-3         Ready               Active                                  19.03.5
+NAME                  SERVICES            ORCHESTRATOR
+demoswarm-demostack   4                   Swarm
+$
+```
+
+### Create a Geographically Diverse Swarm
+
+The following example creates a Docker Swarm that has Docker hosts in 9 different DigitalOcean regions.
+This is useful for testing Wavelet with a wide array of latencies.
+
+```
+$ ./manage-swarm create digitalocean bignet <apiKey> --count 1 --region nyc1 --size s-4vcpu-8gb
+for region in sgp1 lon1 nyc3 ams3 fra1 tor1 sfo2 blr1; do
+        ./manage-swarm expand bignet 1 --region "${region}"
+done
+```
 
 ## Theory of Operation
 ### Introduction
