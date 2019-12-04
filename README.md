@@ -422,6 +422,79 @@ m99xow4evz85        demoswarm-duplistack_wavelet.2        rkeene/wavelet-stack-n
 ypq5dk7lv4rf        demoswarm-duplistack_wavelet.3        rkeene/wavelet-stack-node:benchmark   demoswarm-1         Running             Running 37 seconds ago
 ```
 
+### Rebuilding a Stack from a Backup
+
+The following example recreates a stack from a database backup (taken from `manage-stack dump-db`) and configuration
+(taken from `manage-stack config`).
+
+First we make the backup and destroy the existing stack.
+
+```
+$ ./manage-stack -s demoswarm-demostack dump-db 1 backups/demo-backup-db.tar.gz
+$ ./manage-stack -s demoswarm-demostack config
+REGISTRY=rkeene
+WAVELET_CLEAN_VOLUMES=no
+WAVELET_MEMORY_MAX=2048
+WAVELET_NODES=3
+WAVELET_NO_RPC=true
+WAVELET_SNOWBALL_BETA=150
+WAVELET_SNOWBALL_K=2
+WAVELET_TAG=benchmark
+$ ./manage-stack -s demoswarm-demostack stop
+...
+Nothing found in stack: demoswarm-demostack
+$ ./manage-stack -s demoswarm-demostack cleanVolumes --force
+demoswarm-demostack_wavelet_wavelet_db_instance_1
+demoswarm-demostack_sync_wavelet_db_instance_1
+demoswarm-demostack_wavelet_wavelet_db_instance_2
+demoswarm-demostack_wavelet_wavelet_db_instance_3
+$
+```
+
+Second we rebuild the Stack using the previous configuration:
+
+```
+$ ./manage-stack -s demoswarm-copystack edit-config
+<Insert Config Here>
+### Note the number of nodes, temporarily change it to 1 so we only have
+### to upload the DB once
+WAVELET_NODES=1
+:wq
+$ ./manage-stack -s demoswarm-copystack start
+Creating network demoswarm-copystack_default
+Creating service demoswarm-copystack_benchmark
+Creating service demoswarm-copystack_sync
+Creating service demoswarm-copystack_loadbalancer
+Creating service demoswarm-copystack_wavelet
+$ ./manage-stack -s demoswarm-copystack cp backups/demo-backup-db.tar.gz 1:/tmp
+$ ./manage-stack -s demoswarm-copystack shell 1
+bash-4.4# cd /db
+bash-4.4# ls
+000001.log       CURRENT          LOCK             LOG              MANIFEST-000000
+bash-4.4# mkdir x
+bash-4.4# cd x
+bash-4.4# gzip -dc /tmp/demo-backup-db.tar.gz | tar -xf -
+bash-4.4# cd ..
+bash-4.4# rm -f *; mv x/* .; rmdir x; pkill -9 -x /wavelet
+rm: 'x' is a directory
+bash-4.4# ls
+000003.ldb       000005.log       CURRENT.bak      LOG
+000004.ldb       CURRENT          LOCK             MANIFEST-000006
+bash-4.4# exit
+$ ./manage-stack -s demoswarm-copystack edit-config
+<Exiting Config Here>
+WAVELET_NODES=<NumberOfNodesFromPreviousStep>
+:wq
+$ ./manage-stack -s demoswarm-copystack update
+Updating service demoswarm-copystack_benchmark (id: w8gin0o6aeisap86hsyagjrcy)
+Updating service demoswarm-copystack_sync (id: yx3quhjpukhosmzgn3rp2m82i)
+Updating service demoswarm-copystack_loadbalancer (id: nnbvghcw4rhr8sy4tqenlel5k)
+Updating service demoswarm-copystack_wavelet (id: qqgh8663rgt0q1k9gvl1alu1d)
+$ ./manage-stack -s demoswarm-copystack attach 1
+l
+11:31PM INF Here is the current status of your node. balance: 9999999999999529446 block_height: 48 block_id: 0552dc9c6b4141d2f8e257cfd6da134cfea9d26995e87dfc0040688c7ea437ce client_block: 48 num_accounts_in_store: 0 num_missing_tx: 0 num_tx: 0 num_tx_in_store: 0 peers: ["10.0.3.14:3001[68a5f19ea9c5e1e61836a189175a159f36dc273c07eb9e58448b3529957e3218]","10.0.3.15:3002[ce55ce8e451272e042683766f02165b8ca18ce1aa989c77f48b87ff4fc29fcfa]"] preferred_block_id: N/A preferred_votes: 0 reward: 268888 stake: 201666 sync_status: "Node is fully synced" user_id: e919a3626df31b6114ec79567726e9a31c600a5d192e871de1b862412ae8e4c0     
+```
+
 ## Theory of Operation
 ### Introduction
 The two main components of this suite of tools are:
