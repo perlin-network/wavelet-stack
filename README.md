@@ -304,6 +304,42 @@ $
 
 (n.b., if you see the error "scp: /etc/wavelet-stack/demoswarm-demostack: No such file or directory" when creating your first stack on a swarm, it may be safely ignored.)
 
+### Update Wavelet on a Stack
+
+Example 1: Update to include any changes from a local checkout of Wavelet
+```
+$ ./manage-stack -s demoswarm-demostack edit-config
+REGISTRY=rkeene
+WAVELET_TAG=benchmark
+WAVELET_BUILD_DIR=/home/rkeene/devel/perlin-dev/wavelet-clean
+WAVELET_REBUILD_ON_START=yes
+...
+:wq
+$ ( cd /home/rkeene/devel/perlin-dev/wavelet-clean && git update/pull/etc )
+$ docker login
+$ ./manage-stack -s demoswarm-demostack update
+$ ./manage-stack -s demoswarm-demostack status watch
+```
+
+Example 2: Update a Stack to run a specific tag -- in this case `perlin/*:v0.3.0`
+```
+$ ./manage-stack -s demoswarm-demostack edit-config
+REGISTRY=perlin
+WAVELET_TAG=v0.3.0
+WAVELET_BUILD_DIR=/home/rkeene/devel/perlin-dev/wavelet-clean
+WAVELET_REBUILD_ON_START=no
+...
+:wq
+$ ./manage-stack -s demoswarm-demostack update
+$ ./manage-stack -s demoswarm-demostack status watch
+```
+
+Example 3: Create a group of Docker images with a particular tag from a particular source tree
+```
+$ docker login
+$ REGISTRY=perlin WAVELET_TAG=v0.3.0 WAVELET_BUILD_DIR=/home/rkeene/devel/perlin-dev/wavelet-clean ./build-all-nodes
+```
+
 ### Import an existing Swarm
 
 The following example imports a Swarm by SSH'ing as root the the IP specified and downloading the configuration
