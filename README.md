@@ -304,6 +304,26 @@ $
 
 (n.b., if you see the error "scp: /etc/wavelet-stack/demoswarm-demostack: No such file or directory" when creating your first stack on a swarm, it may be safely ignored.)
 
+### Run a Benchmark
+
+The following example runs a single benchmark instance and then stops it:
+
+```
+$ ./manage-stack -s demoswarm-demostack benchmark
+demoswarm-demostack_benchmark scaled to 1
+overall progress: 1 out of 1 tasks
+1/1: running   [==================================================>]
+verify: Service converged
+11:03PM INF Benchmarking... accepted_tps: 0.1942050180078577 downloaded_tps: 0 gossiped_tps: 0 queried_bps: 0.08597350826813725 query_latency_max_ms: 6 query_latency_mean_ms: 0.3055822267509728 query_latency_min_ms: 0 received_tps: 0
+11:03PM INF Benchmarking... accepted_tps: 0.28440662295239344 downloaded_tps: 0 gossiped_tps: 0 queried_bps: 0.091853589683795 query_latency_max_ms: 6 query_latency_mean_ms: 0.3169363319066148 query_latency_min_ms: 0 received_tps: 0    
+^C
+$ ./manage-stack -s demoswarm-demostack nobenchmark
+demoswarm-demostack_benchmark scaled to 0
+overall progress: 0 out of 0 tasks
+verify: Service converged
+$ 
+```
+
 ### Update Wavelet on a Stack
 
 Example 1: Update to include any changes from a local checkout of Wavelet
@@ -376,6 +396,30 @@ $ ./manage-swarm create digitalocean bignet <apiKey> --count 1 --region nyc1 --s
 for region in sgp1 lon1 nyc3 ams3 fra1 tor1 sfo2 blr1; do
         ./manage-swarm expand bignet 1 --region "${region}"
 done
+```
+
+### Duplicating a Stack
+
+The following example duplicates an existing running Stack's configuration
+and database into a new Stack named "`demoswarm-duplistack`"
+
+```
+$ ./manage-stack -s demoswarm-demostack duplicate-stack demoswarm-duplistack
+...
+$ ./manage-stack -s demoswarm-duplistack status
+demoswarm-duplistack (on demoswarm):
+  - RUNNING
+  - VOLUMES
+  - API (main): http://<ip>:30097/
+  - API (all): http://<ip>:30098/
+  - RPC: <ip>:30146
+----
+ID                  NAME                                  IMAGE                                 NODE                DESIRED STATE       CURRENT STATE                ERROR               PORTS
+o57biard8uwu        demoswarm-duplistack_loadbalancer.1   rkeene/wavelet-stack-lb:latest        demoswarm-1         Running             Running about a minute ago
+n07rpaayhy6b        demoswarm-duplistack_sync.1           elcolio/etcd:latest                   demoswarm-3         Running             Running about a minute ago
+yn3n0fve6fbs        demoswarm-duplistack_wavelet.1        rkeene/wavelet-stack-node:benchmark   demoswarm-3         Running             Running 39 seconds ago
+m99xow4evz85        demoswarm-duplistack_wavelet.2        rkeene/wavelet-stack-node:benchmark   demoswarm-2         Running             Running 36 seconds ago
+ypq5dk7lv4rf        demoswarm-duplistack_wavelet.3        rkeene/wavelet-stack-node:benchmark   demoswarm-1         Running             Running 37 seconds ago
 ```
 
 ## Theory of Operation
