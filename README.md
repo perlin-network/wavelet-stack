@@ -89,7 +89,7 @@ Configuration options are:
   9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed (if not specified as true, random port)
   10. `WAVELET_RPC_PORT` - Port to listen for the first node for RPC requests
   11. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`)
-  12. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop`
+  12. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop` or `reset`
   13. `WAVELET_API_HOST` - Hostname, if supplied, HTTPS support is enabled on port 443/tcp
   14. `WAVELET_API_PORT` - Port to listen on for API requests (HTTP-only) (if not specified, random port)
   15. `WAVELET_API_ACME_ACCOUNT_KEY` - PEM encoded ACME account key for autocert.  Generally if `WAVELET_API_HOST` is provided, this should be provided also.
@@ -299,3 +299,85 @@ $
 ```
 
 (n.b., if you see the error "scp: /etc/wavelet-stack/demoswarm-demostack: No such file or directory" when creating your first stack on a swarm, it may be safely ignored.)
+
+## Theory of Operation
+### Introduction
+The two main components of this suite of tools are:
+  1. `manage-swarm`
+  2. `manage-stack`
+
+### `manage-swarm`
+Manage Swarm is relatively simple and creates, destroys, imports, modifies, or examines a [Docker Swarm](https://docs.docker.com/engine/swarm/) on
+external providers using [Docker Machine](https://docs.docker.com/machine/).
+
+Currently there is only one provider:
+  1. `digitalocean`
+  
+Further providers can be added by modifying `manage-swarm` to add the following functions named after that provider:
+  1. `create_<provider>()` which must create new Docker Swarm nodes, including a master, on the specified provider using `docker-machine` and join them to the same Docker Swarm using the commands returned by "`docker swarm init`" command run on the master node.
+  2. `expand_<provider>()` which must create new Docker Swarm nodes on the specified provider using `docker-machine` and join them to an existing Swarm
+
+The Docker Machine configuration is stored on every host in the Swarm, which can then be used to import the Swarm onto new systems
+using the `manage-swarm import` command.
+
+The IP of any host in the swarm can be used with the `manage-swarm import` command.
+The `manage-swarm import` command will SSH into the IP specified and download the swarm configuration into the user's Docker Machine
+directory as well as place the Docker Machine information into `config/swarms/<swarmName>` so that the swarm can be used by
+`manage-stack` when appropriate.
+
+Swarms may also be destroyed using `manage-swarm destroy`, which uses `docker-machine` to deprovision the backing virtual machines
+and releases all resources.  This should be used with care.
+
+### `manage-stack`
+The main utility in this suite is called `manage-stack` and it can create, configure, reconfigure, start, stop, update, attach,
+and various other actions to a Wavelet Stack.  A Wavelet Stack is a [Docker Stack](https://docs.docker.com/engine/reference/commandline/stack/)
+for running [Wavelet](https://github.com/perlin/wavelet/) in a managed way on a [Docker Swarm](https://docs.docker.com/engine/swarm/).  It
+handles things like gracefully upgrading between releases based on [Docker Images](https://docs.docker.com/engine/reference/commandline/images/),
+extending the number of Wavelet instances in a cluster, ensuring that nodes within a Wavelet cluster are communicating with
+each other, and configuring services so that the cluster can be accessed externally via either the HTTP/HTTPS API or via the
+gRPC RPC interface.
+
+The main components of a Wavelet Stack are:
+   1. loadbalancer
+   2. sync
+   3. wavelet
+   4. benchmark
+   
+The definition for these services within the Docker Stack live in the [docker-compose.yml](https://docs.docker.com/compose/compose-file/) file
+in the top-level directory for `wavelet-stack`.
+
+The `loadbalancer` node is a container running HAProxy that acts as the frontend for all communications to the cluster.  It
+then proxies requests to the correct destination.
+
+The `sync` node is a container based on etcd that acts as a way for the Wavelet nodes to advertise their address and port
+to each other as well as to the `loadbalancer` node.
+
+The `wavelet` node is a container that runs Wavelet.  It reaches out to the `sync` node to register the RPC port it will listen
+on as well as pulls in from the `sync` node the RPC IP and RPC port that are exposed externally, as these need to be specified
+by the listening node.  Many instances of this container may be run in a stack and they will coordinate (via the `sync` node)
+their activities to ensure that they are communicating.
+
+The `benchmark` node is a container that runs the `benchmark` command from Wavelet.  Many instaces of this node may be run
+simultaneously and they will each interact with a different Wavelet instance from the `wavelet` component over the HTTP API.
+
+Stack configuration is managed as a set of key-value pairs, identified in an early section.  The stack configuration file is kept
+on the Swarm host in the `/etc` directory.  This is so that the configuration may be shared among multiple users of a stack.
+
+Once a configuration for a stack has been created (refer to examples and references above) using the `manage-stack edit-config`
+command the stack may be started using the `manage-stack start` command.
+
+If the configuration is updated, again using the `manage-stack edit-config` command, the `manage-stack update` command may be
+used.  Both `start` and `update` perform the same action and they are synonyms.
+
+Wavelet instances store their data in [Docker Volumes](https://docs.docker.com/storage/volumes/) which are backed by host storage.
+Each instance in a stack gets their own volume.  As long as the stack and host are running, Docker maintains an affinity for
+the container on the host holding its storage so nodes will be restarted attached to their database when updating.  If the
+container is stopped (e.g., using `manage-stack stop` or `manage-stack reset`) then this affinity is lost and when the node
+containers are restarted they may not be on the same host and thus may not get the same volume as before they were stopped or
+reset.  To avoid this case it is usually best to avoid using `manage-stack stop` or `manage-stack reset` unless the data
+is no longer needed.
+
+By default the volumes are not deleted when the Wavelet Stack is stopped.  This behavior can be changed by setting the
+`WAVELET_CLEAN_VOLUMES` variable to a true value in the stack configuration.  Volumes will also be removed when using
+`manage-stack reset --hard`.  Volumes can also be manually cleaned up for a stopped stack using the command
+`manage-stack cleanVolumes --force`.
