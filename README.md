@@ -337,7 +337,10 @@ $ ./manage-stack -s demoswarm-demostack status watch
 Example 3: Create a group of Docker images with a particular tag from a particular source tree
 ```
 $ docker login
-$ REGISTRY=perlin WAVELET_TAG=v0.3.0 WAVELET_BUILD_DIR=/home/rkeene/devel/perlin-dev/wavelet-clean ./build-all-nodes
+$ REGISTRY=perlin \
+      WAVELET_TAG=v0.3.0 \
+      WAVELET_BUILD_DIR=/home/rkeene/devel/perlin-dev/wavelet-clean \
+      ./build-all-nodes
 ```
 
 ### Import an existing Swarm
