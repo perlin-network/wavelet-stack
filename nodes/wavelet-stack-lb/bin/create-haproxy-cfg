@@ -1,9 +1,21 @@
 #! /usr/bin/env bash
 
+# This script manages the HAProxy for a Wavelet Stack.
+#
+# Due to the way Wavelet and Docker both work, it is
+# currently nessecary to use the load balancer for RPC
+# connections.
+
 configDir="/usr/local/etc/haproxy"
 configFileTemplate="${configDir}/haproxy.cfg.in"
 configFile="${configDir}/haproxy.cfg"
 
+# Internal function to cache mapping of all peers to avoid lookups
+# for each peer individually when creating a configuration.
+# This reads the etcd key trees "peers" (which are populated
+# by "wavelet" instances) and "mapping" (which is populated
+# by the "manage-stack" script when a Wavelet Stack is started
+# or updated).
 function cachePeers() {
 	local peerData mappingData
 
@@ -33,15 +45,18 @@ function cachePeers() {
 	return 0
 }
 
+# Clean up the peers cache, so that next time a lookup occurs it pulls in fresh cache
 function uncachePeers() {
 	unset peersCache
 	unset externalMappingCache
 }
 
+# Get all peers, from cache -- must have populated the cache prior to calling this function
 function getPeers() {
 	echo "${peersCache}" | jq -crM '.node.nodes[].key' 2>/dev/null | sed 's@^.*/@@' | sort
 }
 
+# Get the information for the lowest numbered peer (usually 1)
 function getNode1() {
 	local peer
 	local value
@@ -56,6 +71,7 @@ function getNode1() {
 	echo "${value}"
 }
 
+# Get external<->internal port mapping data from the cache
 function getMappingData() {
 	local peer field
 	local data
@@ -68,6 +84,8 @@ function getMappingData() {
 	echo "${data}" | cut -f "${field}" -d /
 }
 
+# Get the loadbalancer port for a given node ID.  This is the internal port the
+# loadbalancer will listen on to map to the RPC port for a given Wavelet node.
 function getPeerLBPort() {
 	local peer
 	local port
@@ -79,6 +97,7 @@ function getPeerLBPort() {
 	echo "${port}"
 }
 
+# Get the peer internal IP address for a Wavelet node.
 function getPeerWaveletAddr() {
 	local peer
 	local data addr
@@ -90,6 +109,8 @@ function getPeerWaveletAddr() {
 	echo "${data}" | sed 's@:[^:]*$@@'
 }
 
+# Get the peer internal port for RPC for a Wavelet node.  If using exposed RPC for
+# this stack then the port will the external port.
 function getPeerWaveletPort() {
 	local peer
 	local port
@@ -101,6 +122,9 @@ function getPeerWaveletPort() {
 	echo "${port}"
 }
 
+# Generate the HAProxy configuration for all Wavelet RPC nodes.  If the file
+# /tmp/wavelet-disable-rpc exists or WAVELET_NO_RPC is set to "true" then
+# no configuration is generated.
 function generateHAProxyRPCConfiguration() {
 	local id peer waveletAddr waveletPort lbPort
 
@@ -129,6 +153,10 @@ function generateHAProxyRPCConfiguration() {
 	return 0
 }
 
+# Generate the HAProxy configuration for all Wavelet API nodes.  If the file
+# /tmp/wavelet-disable-api exists then no configuration is generated.
+# If WAVELET_API_HOST is specified, also listen on port 443/tcp and
+# direct that to node 1's port 443/tcp
 function generateHAProxyAPIConfiguration() {
 	local id peer
 	local waveletAddr lbPort
@@ -188,7 +216,12 @@ function generateHAProxyAPIConfiguration() {
 	return 0
 }
 
-
+# Function to update the HAProxy configuration with the latest
+# details for the stack.  If the new configuration differs from
+# the currently running configuration, update the HAProxy
+# configuration file and ask HAProxy to gracefully reload
+# the configuration file.  Most of the global configuration
+# comes from the template file specified as "configFileTemplate".
 function updateConfig() {
 	local waveletRPCConfig waveletAPIConfig haproxyPids
 

@@ -5,9 +5,14 @@ peersURL="${syncURL}/peers"
 mappingURL="${syncURL}/mapping"
 peerID="${WAVELET_NODE_ID}"
 
+# Generate a random API secret to use to authenticate to
+# Wavelet's HTTP API to make control requests
 WAVELET_API_SECRET="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | sha256sum | cut -c 1-64)"
 export WAVELET_API_SECRET
 
+# Get the private and public key for a given node ID.  This will either pull
+# from the built-in default keys (in /opt/perlin/etc/wallets) or from the
+# CSV keys from the WAVELET_KEYS variable.
 function getKey() {
 	local id keys
 
@@ -25,18 +30,23 @@ function getKey() {
 	echo "${keys}"
 }
 
+# Get the private key for a specified node ID
 function getPrivateKey() {
 	getKey "$@" | awk '{ print $1 }'
 }
 
+# Get the public key for a specified node ID
 function getPublicKey() {
 	getKey "$@" | awk '{ print $2 }'
 }
 
+# Get the local, internal, IP for the current instance
 function getLocalIP() {
 	getent hosts "$(uname -n)" | awk '{ print $1 }'
 }
 
+# Register ourselves with etcd on the "sync" node, include our local IP
+# and the port specified and a 30s TTL
 function registerPeer() {
 	local ip port
 
@@ -49,6 +59,8 @@ function registerPeer() {
 		--data ttl=30 >/dev/null 2>/dev/null
 }
 
+# Daemon function to maintain peer registration for our current node
+# every 10s, using the port specified.
 function maintainPeerRegistry() {
 	local port
 	port="$1"
@@ -62,6 +74,9 @@ function maintainPeerRegistry() {
 	) &
 }
 
+# Determine the CIDR for the current service.  This is used to
+# determine which Wavelet peers are nodes that are in the stack
+# and which ones are external peers.
 function serviceCIDR() {
 	local serviceName serviceIP serviceInterface serviceCIDR
 
@@ -82,6 +97,8 @@ function serviceCIDR() {
 	return 0
 }
 
+# Function to determine if a given peer is an internal peer that
+# is part of this stack or an external peer
 function isSyncPeer() {
 	local peer
 	local servicePrefix serviceNetwork peerNetwork
@@ -108,6 +125,8 @@ function isSyncPeer() {
 	return 1
 }
 
+# Ask the running wavelet instance for its peers and return them,
+# optionally not filtering out external peers.
 function getNodePeers() {
 	local peers filteredPeers
 	local peer
@@ -148,6 +167,9 @@ function getNodePeers() {
 	return 0
 }
 
+# Get a list of other Wavelet peers running within the current stack
+# which we should connect to in order to ensure that we have
+# a well-connected Wavelnet network
 function getSyncPeers() {
 	local peerIDs
 	local peer
@@ -169,11 +191,14 @@ function getSyncPeers() {
 	fi
 }
 
+# Internal function to determine what the highest currently registered node ID among
+# any active peers
 function getMaxSyncPeerID() {
 	curl -sSL "${peersURL}" | jq -crM '.node.nodes[].key' | sed 's@/peers/@@' | sort -n | tail -n 1
 
 }
 
+# Get the peer IP and port for a given node ID and type (api or rpc)
 function getSyncPeer() {
 	local id portType
 	local peerIP
@@ -204,6 +229,15 @@ function getSyncPeer() {
 	return 0
 }
 
+# Cache mapping of Docker external ports to service internal ports so that
+# they do not need to be looked up individually.  This mapping indicates
+# what port Docker is listening on on the host and which port it is
+# mapped to on the load balancer, which will then direct traffic to
+# an internal Wavelet instance if so configured.
+# If the cache already exists it will be updated.  If there is an
+# error getting the mapping (e.g., because the mapping has not
+# yet been pushed into the sync instance, or the sync instance
+# is not running) then this function will wait until that is done.
 function cacheExternalMappingData() {
 	local data
 	while true; do
@@ -221,10 +255,12 @@ function cacheExternalMappingData() {
 	done
 }
 
+# Clean up caching of external ports, to ensure that fresh data is used
 function uncacheExternalMappingData() {
 	unset externalMappingDataCache
 }
 
+# Get the internal port for a given node ID
 function getExternalMappingData() {
 	local peer
 	local data
@@ -243,6 +279,10 @@ function getExternalMappingData() {
 	return 0
 }
 
+# Get the port that Wavelet should listen on for incoming RPC connections.
+# This will either be port 3000+node ID if no external RPC is enabled, or
+# the port that Docker is listening on externally (because Wavelet needs
+# to identify that port to advertise to other peers).
 function getExternalPort() {
 	local port
 
@@ -261,6 +301,10 @@ function getExternalPort() {
 	echo "${port}"
 }
 
+# Get the IP address that Wavelet should advertise to other Wavelet instances
+# that it should be contacted at.  If external RPC is used, this will be the
+# cluster External IP.  If external RPC is not used, this will be the instance's
+# local IP.
 function getExternalIP() {
 	local addr
 
@@ -279,6 +323,7 @@ function getExternalIP() {
 	echo "${addr}"
 }
 
+# Periodically maintain database backups of the Wavelet database
 function waveletDBBackup() {
 	(
 		backupDir='/data/backups'
@@ -331,6 +376,8 @@ function waveletDBBackup() {
 	)
 }
 
+# Use the Wavelet HTTP API to request that it add (connect to) or
+# remove (disconnect from) a peer we have discovered.
 function addOrRemoveWaveletPeer() {
 	local mode peer
 	local curlArgs
@@ -374,14 +421,18 @@ function addOrRemoveWaveletPeer() {
 	return 1
 }
 
+# Wrapper function to add a peer to the current Wavelet instance
 function addWaveletPeer() {
 	addOrRemoveWaveletPeer connect "$@"
 }
 
+# Wrapper function to remove a peer from the current Wavelet instance
 function removeWaveletPeer() {
 	addOrRemoveWaveletPeer disconnect "$@"
 }
 
+# Setup environment variables for running Wavelet and run the Wavelet
+# instance this node provides.
 function runWavelet() {
 	local port
 	local argNextArg
@@ -433,6 +484,11 @@ function runWavelet() {
 		set -- "$@" --port "${port}"
 	fi
 
+	# Manage cert cache directory if the API host
+	# is specified, this is needed to keep
+	# the Let's Encrypt generated certificate
+	# across upgrades, preventing API rate-limits
+	# from being reached
 	WAVELET_CERTS_CACHE_DIR=''
 	if [ -n "${WAVELET_API_HOST}" ]; then
 		WAVELET_CERTS_CACHE_DIR='/data/certs'
@@ -441,6 +497,10 @@ function runWavelet() {
 	fi
 	export WAVELET_CERTS_CACHE_DIR
 
+	# If the ACME API account key is provided
+	# write it to disk where Wavelet is looking for it
+	# this ensures that the Let's Encrypt certificates
+	# for a stack's domain can be reliably renewed
 	if [ -n "${WAVELET_API_ACME_ACCOUNT_KEY}" ]; then
 		if [ -n "${WAVELET_CERTS_CACHE_DIR}" ]; then
 			mkdir -p "${WAVELET_CERTS_CACHE_DIR}"
@@ -448,16 +508,24 @@ function runWavelet() {
 		fi
 	fi
 
+	# Start periodic process which registers our node with
+	# etcd on the "sync" node so that every other Wavelet
+	# node can find us to peer with us.
 	maintainPeerRegistry "${port}"
 
+	# If no vaild memory max value is provided unset the variable
 	if [ -z "${WAVELET_MEMORY_MAX}" ] || [ "${WAVELET_MEMORY_MAX}" = '0' ]; then
 		unset WAVELET_MEMORY_MAX
 	fi
 
+	# If no wallet was specified, look up the appropriate private key
 	if [ -z "${WAVELET_WALLET}" ]; then
 		WAVELET_WALLET="$(getPrivateKey)"
 	fi
 
+	# If no genesis block was provided as part of the stack, generate
+	# an appropriate genesis block with the first N (where N is specified
+	# in the variable WAVELET_RICH_WALLETS) accounts are "rich".
 	if [ -z "${WAVELET_GENESIS}" ]; then
 		for ((idx = 0; idx < ${WAVELET_RICH_WALLETS}; idx++)) {
 			WAVELET_GENESIS="${WAVELET_GENESIS},"'"'"$(getPublicKey "${idx}")"'": {"balance": 10000000000000000000, "rewards": 5000000}'
@@ -466,14 +534,26 @@ function runWavelet() {
 	fi
 	export WAVELET_WALLET WAVELET_GENESIS
 
+	# Disable the auto-updater for our internal nodes
+	WAVELET_UPDATE_URL=''
+	export WAVELET_UPDATE_URL
+
+	# For debugging, write out the relevant Wavelet configuration environment
+	# variables to disk.
 	set | grep '^WAVELET' > /tmp/environment.txt
 
+	# Determine if the Wavelet instance has the connect/disconnect API
+	# for adding peers -- if so we can operate differently.
 	haveConnectAPI='false'
 	if /wavelet --help 2>/dev/null | grep 'WAVELET_API_SECRET' >/dev/null; then
 		haveConnectAPI='true'
 	fi
 
-	# Add or Remove peers as they come/go
+	# Create a new periodic routine which adds and removes peers
+	# as they come/go from the registry on etcd on the "sync" node
+	# This will use either the HTTP API for connect/disconnect or
+	# killing Wavelet, which will cause it to use the new peers
+	# on the command-line.
 	while true; do
 		sleep $[10 + ($RANDOM % 10)]
 
@@ -552,16 +632,14 @@ function runWavelet() {
 		fi
 	done &
 
+	# If requested, backup the Wavelet DB every 30 minutes.  This will
+	# also remove older backups.
 	if [ "${WAVELET_BACKUP_DB}" = 'true' ]; then
 		while true; do
 			waveletDBBackup
 			sleep $[60 * 30]
 		done &
 	fi
-
-	# Disable the auto-updater for our internal nodes
-	WAVELET_UPDATE_URL=''
-	export WAVELET_UPDATE_URL
 
 	# Run the wavelet process in a loop so that exiting just
 	# causes it to reload, unless a special marker file
@@ -573,6 +651,8 @@ function runWavelet() {
 			break
 		fi
 
+		# If we lack the HTTP API for connect/disconnect,
+		# specify known peers as command line arguments
 		if [ "${haveConnectAPI}" = 'false' ]; then
 			waveletAddArgs=( $(getSyncPeers) )
 		fi
@@ -584,12 +664,16 @@ function runWavelet() {
 
 		stopTime="$(date +%s)"
 
+		# If the daemon exited more quickly than 3 seconds assume it is
+		# a failure and increment repeated failure count.
 		if [ $[${stopTime} - ${startTime}] -lt 3 ]; then
 			failCount=$[${failCount} + 1]
 		else
 			failCount='0'
 		fi
 
+		# If there are too many failures in a row assume the database is
+		# broken, make a backup copy of the database and delete the DB.
 		if [ "${failCount}" -gt 10 ]; then
 			(
 				set -e
@@ -606,6 +690,9 @@ function runWavelet() {
 	exit "${retval}"
 }
 
+# Run the benchmark tool against a peer, ensure that each instance of the benchmark
+# will connect to a different Wavelet instance (as long as there are enough Wavelet
+# instances in this stack)
 function runBenchmark() {
 	local otherPeerID otherPeerIP
 

@@ -581,7 +581,7 @@ The documentation on the internals/architecture needs to be developed out in sig
 I'll update the documentation with the details required.  Some of the information is common to most Docker Swarm deployments so some questions will refer to the Docker documentation.  Many are just implementation details which are easy to document but also similarly not required to know how it works (in theory) or how to use it so I'll probably link to the source code from the documentation for those bits and add comments there.
 
 #### Q1. What exact key/value pairs are being stored in etcd, and how are they used?
-  A1. Implementation details
+  A1. The etcd process on the `sync` instance stores stack-wide configuration details.  This includes a list of what IP and Ports each node is listening (and advertising) on for Wavelet and the Docker port mappings for the stack.
   
 #### Q2. What is the bootstrapping process explicitly step-by-step? Given N nodes and a specific configuration file, how does wavelet-stack setup the cluster from start to finish?
   A2. Implementation details
@@ -593,7 +593,7 @@ I'll update the documentation with the details required.  Some of the informatio
   A4. Implementation details
 
 #### Q5. What exact settings is HAProxy configured with? What about for each and every single other component like Docker Machine/Docker Swarm/etc?
-  A5. Implementation details
+  A5. The HAProxy configuration is set based on [a template](https://github.com/perlin-network/wavelet-stack/blob/901c758974cea19dd69be3b0728d1dbbaf10ab7d/nodes/wavelet-stack-lb/etc/haproxy.cfg.in) and then the details for the API and RPC are added based on exactly how the stack is configured (e.g., how many instances of the `wavelet` node are running, if RPC is open to the outside, if particular RPC or API ports have been specified) by [a script](https://github.com/perlin-network/wavelet-stack/blob/901c758974cea19dd69be3b0728d1dbbaf10ab7d/nodes/wavelet-stack-lb/bin/create-haproxy-cfg).  This script will regenerate the HAProxy configuration file 10 seconds.  If it detects any changes then a new configuration file is written and HAProxy is signalled to gracefully reload.
 
 #### Q6. What happens when a node fails? If a node fails to start up? If a node becomes unresponsive? What are the restart policies?
   A6. Docker details
