@@ -575,3 +575,58 @@ By default the volumes are not deleted when the Wavelet Stack is stopped.  This 
 `WAVELET_CLEAN_VOLUMES` variable to a true value in the stack configuration.  Volumes will also be removed when using
 `manage-stack reset --hard`.  Volumes can also be manually cleaned up for a stopped stack using the command
 `manage-stack cleanVolumes --force`.
+
+## Questions and Answers
+The documentation on the internals/architecture needs to be developed out in significantly more detail
+I'll update the documentation with the details required.  Some of the information is common to most Docker Swarm deployments so some questions will refer to the Docker documentation.  Many are just implementation details which are easy to document but also similarly not required to know how it works (in theory) or how to use it so I'll probably link to the source code from the documentation for those bits and add comments there.
+
+#### Q1. What exact key/value pairs are being stored in etcd, and how are they used?
+  A1. Implementation details
+  
+#### Q2. What is the bootstrapping process explicitly step-by-step? Given N nodes and a specific configuration file, how does wavelet-stack setup the cluster from start to finish?
+  A2. Implementation details
+
+#### Q3. What does every single value in a cluster configuration settings file mean, and how does changing each and every single value affect the cluster as a whole? What are preconditions and postconditions for configuring each and every value?
+  A3. Implementation details
+
+#### Q4. What exact environment variables are used on each node, and how are they generated/set? At what part of a clusters lifecycle?
+  A4. Implementation details
+
+#### Q5. What exact settings is HAProxy configured with? What about for each and every single other component like Docker Machine/Docker Swarm/etc?
+  A5. Implementation details
+
+#### Q6. What happens when a node fails? If a node fails to start up? If a node becomes unresponsive? What are the restart policies?
+  A6. Docker details
+
+#### Q7. How do you determine whether or not a node is healthy? How often is this check performed?
+  A7. The Docker health check script is in `nodes/wavelet-stack-node/bin/health` and is run by the `healthcheck` directive, which is documented as part of the [HEALTHCHECK](https://docs.docker.com/engine/reference/builder/#healthcheck) instruction.  The current health check script just validates that the local node has peers.
+   
+#### Q8. If a developer were to go into a cluster and manually stop certain components of the cluster, is there anything they would have to reset to ensure that wavelet-stack wouldn't exhibit strange behavior?
+  A8. It really depends on what they did.
+  
+#### Q9. In what setting would I want to use WAVELET_CLEAN_VOLUMES ?
+  A9. You would use `WAVELET_CLEAN_VOLUMES` if you wanted to have the volumes cleaned after every `stop` (which includes in the middle of a `reset` which is a `stop` then `start`).  For example if you were testing building a stack from scratch and needed to wipe the database and all persistent storage after you are done with it.
+
+#### Q10. What is a clusters lifecycle?
+  A10. ???
+
+#### Q11. Could a wavelet isntance get stuck in a bootloop when the cluster is being bootstrapped? What are the possible reasons why?
+  A11. ???
+
+#### Q12. How exactly are cluster configurations (devnet, mainnet, etc.) configured/stored/replicated/maintained in wavelet-stack?
+  A12. If using an remote swarm: Every time you use `manage-stack edit-config` the new configuration file is uploaded to `/etc/wavelet-stack/<stackName>` on the manager of the Swarm.  If not using a remote swarm: The files are stored in `config/stacks/<stackName>`
+
+#### Q13. What exact HTTP APIs does wavelet-stack call on a wavelet node, what parameters are the calls performed with, and at what part of a clusters lifecycle are they called?
+  A13. Implementation details
+
+#### Q14. Is there any local state stored via wavelet-stack? Or is all state stored remotely?
+  A14. Locally, the `docker-machine` information is stored.
+
+#### Q15. What are the preconditions for running each and every single command? What errors can each command possibly produce and what can be done to resolve these errors?
+  A15. There are only 3 commands: `manage-swarm`, `manage-stack`, and `build-all-nodes`.  You only really need to run `build-all-nodes` to build the Docker images before running `manage-stack`.  You can use an remote swarm, in which case you will need to use `manage-swarm` to create or import an remote swarm.  By default the local machine is used for the swarm.
+
+#### Q16. What exactly is the upgrade process for upgrading to a new version of Wavelet? If the auto-updater is not working, what could be done instead?
+  A16. This is handled by upgrading to a new Docker image, and calling `docker stack deploy`, which is documented by [Docker stack deploy](https://docs.docker.com/engine/reference/commandline/stack_deploy/), there's nothing special about `manage-stack` apart from modifying the docker-compose.yml file if needed based on the Stack configuration -- it's the same as a start
+
+#### A17. Is there any way we can configure the Docker registry with authentication details?
+  A17. Yes, that's why you need to call "`docker login`"
