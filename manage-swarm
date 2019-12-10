@@ -1,17 +1,18 @@
 #! /usr/bin/env bash
 
-if [ ! -x "$(command -v docker-machine)" ]; then
-	echo "\"docker-machine\" is required, but missing" >&2
+# Check for basic commands which are required before this script
+# can be useful.
+for checkCommand in docker-machine docker jq curl; do
+	if [ ! -x "$(command -v "${checkCommand}")" ]; then
+		echo "\"${checkCommand}\" is required, but missing" >&2
 
-	exit 1
-fi
+		exit 1
+	fi
+done
 
-if [ ! -x "$(command -v docker)" ]; then
-	echo "\"docker\" is required, but missing" >&2
-
-	exit 1
-fi
-
+# Providers
+## DigitalOcean
+### Prompt for a parameter which can only be answered by querying the DigitalOcean API
 function create_digitalocean_ask() {
 	local what
 	local apiKey
@@ -46,6 +47,7 @@ function create_digitalocean_ask() {
 	return 1
 }
 
+### Create a new remote Docker Swarm by creating new nodes on DigitalOcean
 function create_digitalocean() {
 	local name token count
 	local idx startIdx
@@ -140,6 +142,29 @@ function create_digitalocean() {
 	return 0
 }
 
+### Expand a Docker Swarm by spawning additional droplets on DigitalOcean and adding them
+### to the Docker Swarm.
+function expand_digitalocean() {
+	local name info startIdx count
+	local token size region
+
+	name="$1"
+	info="$2"
+	startIdx="$3"
+	count="$4"
+	shift; shift; shift; shift
+
+	token="$(echo "${info}" | jq -crM '.Driver.AccessToken')"
+	region="$(echo "${info}" | jq -crM '.Driver.Region')"
+	size="$(echo "${info}" | jq -crM '.Driver.Size')"
+
+	create_digitalocean "${name}" "${token}" --count "${count}" --size "${size}" --region "${region}" --startIndex "${startIdx}" "$@" || return $?
+
+	return 0
+}
+
+# CLI function to create a new remote Docker Swarm by calling the "create" command
+# for the provider.
 function create() {
 	local provider
 	local swarmFile
@@ -169,25 +194,8 @@ function create() {
 	return 0
 }
 
-function expand_digitalocean() {
-	local name info startIdx count
-	local token size region
-
-	name="$1"
-	info="$2"
-	startIdx="$3"
-	count="$4"
-	shift; shift; shift; shift
-
-	token="$(echo "${info}" | jq -crM '.Driver.AccessToken')"
-	region="$(echo "${info}" | jq -crM '.Driver.Region')"
-	size="$(echo "${info}" | jq -crM '.Driver.Size')"
-
-	create_digitalocean "${name}" "${token}" --count "${count}" --size "${size}" --region "${region}" --startIndex "${startIdx}" "$@" || return $?
-
-	return 0
-}
-
+# CLI function to expand an existing remote Docker Swarm by calling the "expand" command
+# for the provider.
 function expand() {
 	local name count
 	local provider
@@ -227,6 +235,9 @@ function expand() {
 	return 0
 }
 
+# CLI function to destroy a remote Docker Swarm, this just calls "docker-machine"
+# so it is agnostic of all providers, as long as they are supported by
+# "docker-machine"
 function destroy() {
 	local name
 	local swarmFile
@@ -268,6 +279,8 @@ function destroy() {
 	return 0
 }
 
+# CLI function to print the status of a given Docker Swarm, it will
+# list the stacks running on that swarm.
 function status() {
 	local name
 	local swarmFile
@@ -296,6 +309,7 @@ function status() {
 	return 0
 }
 
+# CLI function to print a list of known remote swarms
 function list() {
 	local file
 
@@ -311,6 +325,12 @@ function list() {
 	return 0
 }
 
+# Internal function to create an importable configuration from "docker-machine" for
+# a remote swarm and store it on every node within the swarm.  This is needed so that
+# other users of the swarm can access each machine in the swarm when creating or
+# managing stacks on the swarm.  It needs to be done after every create or expand
+# of the swarm.  After either of those operations, all users will need to (re-)import
+# the swarm.
 function exportConfigToSwarm() {
 	local name
 	local swarmFile
@@ -381,6 +401,9 @@ function exportConfigToSwarm() {
 	return "${retval}"
 }
 
+# CLI function to import the "docker-machine" configuration for a remote swarm.
+# It operates by SSH'ing into the IP specified and pulling the stored configuration
+# by exportConfigToSwarm.
 function import() {
 	local ip
 	local swarmFile swarmName
@@ -436,6 +459,7 @@ function import() {
 	return "${retval}"
 }
 
+# CLI function to print usage information
 function usage() {
 	echo "Usage: manage-swarm create <provider> <swarmName> ..."
 	echo "       manage-swarm import <ip>"
@@ -446,6 +470,7 @@ function usage() {
 	echo "       manage-swarm help"
 }
 
+# To make operating easier, change directories to the directory this script is in
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 action="$1"
@@ -459,6 +484,7 @@ fi
 
 swarmEnvDir="${configDir}/swarms"
 
+# Map the CLI commands to their functions
 case "${action}" in
 	create|destroy|expand|status|list|import|exportConfigToSwarm)
 		"${action}" "$@"

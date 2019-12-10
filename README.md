@@ -19,6 +19,9 @@ The configuration files are:
   2. `config/swarm/<swarmName>` - Loaded when using a particular swarm
   3. `config/stack/<stackName>` - Loaded when using a particular stack, should not be used for remote stacks because other developers may not have the same configuration.  It is usually better to use `manage-stack edit-config` to edit this.
 
+You may need to run "[docker login](https://docs.docker.com/engine/reference/commandline/login/)" to
+login to your Docker registry prior to using or updating images on that Docker registry.
+
 ## manage-swarm
 The `manage-swarm` tool helps create and manage remote Docker swarms using
 Docker Machine.
@@ -575,3 +578,71 @@ By default the volumes are not deleted when the Wavelet Stack is stopped.  This 
 `WAVELET_CLEAN_VOLUMES` variable to a true value in the stack configuration.  Volumes will also be removed when using
 `manage-stack reset --hard`.  Volumes can also be manually cleaned up for a stopped stack using the command
 `manage-stack cleanVolumes --force`.
+
+## Questions and Answers
+#### Q1. What exact key/value pairs are being stored in etcd, and how are they used?
+  A1. The etcd process on the `sync` instance stores stack-wide configuration details.  This includes a list of what IP and Ports each node is listening (and advertising) on for Wavelet and the Docker port mappings for the stack.  The root of these trees are called "`peers`" and "`mapping`" within the etcd instance.
+  
+#### Q2. What is the process explicitly step-by-step? Given N nodes and a specific configuration file, how does wavelet-stack setup the cluster from start to finish?
+  A2. When a stack is created "[docker deploy](https://docs.docker.com/engine/reference/commandline/stack_deploy/)" will create a Docker Stack, which consists of several docker services, defined in the "[docker-compose.yml](https://docs.docker.com/compose/compose-file/)" file.  This file is modified slightly to handle various port configuration options.  Each of those services will create 0 or more containers per service.  The "benchmark" service initially starts with 0 containers, the "sync" and "loadbalancer" services initially start with 1 container, while the "wavelet" service starts with the number of containers specified by `WAVELET_NODES` in the stack configuration.  Additionally, the "manage-stack" script pushes the generated port mapping details from Docker into keys on etcd running on the "sync" instance as soon as its available.  After that, each Wavelet instance starts up and registers the IP address and port is accessible via in etcd on the "sync" instance and tries to connect to each other peer registered in etcd on the "sync" instance.
+
+#### Q3. What does every single value in a cluster configuration settings file mean, and how does changing each and every single value affect the cluster as a whole? What are preconditions and postconditions for configuring each and every value?
+  A3. Configuration options are:
+
+  1. `REGISTRY` - Docker Registry to use (defaults to `localhost:5000`);  Changing this affects where images are pushed to and pulled from.
+  2. `WAVELET_GENESIS` - Wavelet Genesis block descriptor;  Supplying a genesis block descriptor inhibits generation of one internally, and provides this variable to Wavelet.
+  3. `WAVELET_KEYS` - CSV list of private keys and public keys;  Supplying keys provides a way to specify wallets per run node that are not well-known.  If keys are not specified, the default keys will be used, and they are public.
+  4. `WAVELET_NODES` - Number of Wavelet nodes to run (defaults to `3`)
+  5. `WAVELET_RICH_WALLETS` - Number of Rich wallets to create if generating the Genesis block (that is, if `WAVELET_GENEISIS` is not supplied; defaults to `3`)
+  6. `WAVELET_SNOWBALL_K` - Wavelet Snowball K;  Supply Snowball K parameter to every Wavelet instance
+  7. `WAVELET_SNOWBALL_BETA` - Wavelet Snowball Beta;  Supply Snowball Beta parameter to every Wavelet instance
+  8. `WAVELET_MEMORY_MAX` - Max amount of memory to terminate the node after (in MiB);  Supply the parameter to every Wavelet instance
+  9. `WAVELET_NO_RPC` - Boolean to indicate whether not RPC ports are exposed (if not specified as true, random port)
+  10. `WAVELET_RPC_PORT` - Port to listen for the first node for RPC requests
+  11. `WAVELET_TAG` - Tag of the wavelet image to pull down (defaults to `latest`);  Similar to the `REGISTRY` option this affects the tag on images, both pushed and pulled
+  12. `WAVELET_CLEAN_VOLUMES` - Boolean to indicate whether or not the volumes are removed on `stop` or `reset`
+  13. `WAVELET_API_HOST` - Hostname, if supplied, HTTPS support is enabled on port 443/tcp;  Supply the parameter to every Wavelet instance
+  14. `WAVELET_API_PORT` - Port to listen on for API requests (HTTP-only) (if not specified, random port)
+  15. `WAVELET_API_ACME_ACCOUNT_KEY` - PEM encoded ACME account key for autocert.  Generally if `WAVELET_API_HOST` is provided, this should be provided also.
+  16. `WAVELET_BACKUP_DB` - Boolean to indicate whether database backups are automatically taken for wavelet nodes
+  17. `WAVELET_BUILD_DIR` - Directory to rebuild the "wavelet" container from when building all images using `build-all-nodes`
+  18. `WAVELET_REBUILD_ON_START` - Indicate that the `build-all-nodes` script should be run for the given stack when it is started (or reset) (defaults to false)
+
+#### Q4. What exact environment variables are used on each node, and how are they generated/set? At what part of a clusters lifecycle?
+  A4. This is documented as part of the [docker-compose.yml](https://github.com/perlin-network/wavelet-stack/blob/master/docker-compose.yml) as part of the `environment` tag within the YAML file.  The parameters set there come from the stack configuration, with some parameters having default values.
+
+#### Q5. What exact settings is HAProxy configured with? What about for each and every single other component like Docker Machine/Docker Swarm/etc?
+  A5. The HAProxy configuration is set based on [a template](https://github.com/perlin-network/wavelet-stack/blob/901c758974cea19dd69be3b0728d1dbbaf10ab7d/nodes/wavelet-stack-lb/etc/haproxy.cfg.in) and then the details for the API and RPC are added based on exactly how the stack is configured (e.g., how many instances of the `wavelet` node are running, if RPC is open to the outside, if particular RPC or API ports have been specified) by [a script](https://github.com/perlin-network/wavelet-stack/blob/901c758974cea19dd69be3b0728d1dbbaf10ab7d/nodes/wavelet-stack-lb/bin/create-haproxy-cfg).  This script will regenerate the HAProxy configuration file 10 seconds.  If it detects any changes then a new configuration file is written and HAProxy is signalled to gracefully reload.
+
+#### Q6. What happens when a node fails? If a node fails to start up? If a node becomes unresponsive? What are the restart policies?
+  A6. The Docker nodes are all using the default Docker configuration for node management.  Please refer to the [Docker documentation](https://docs.docker.com/engine/reference/commandline/node/)
+
+#### Q7. How do you determine whether or not a node is healthy? How often is this check performed?
+  A7. The Docker health check script is in `nodes/wavelet-stack-node/bin/health` and is run by the `healthcheck` directive, which is documented as part of the [HEALTHCHECK](https://docs.docker.com/engine/reference/builder/#healthcheck) instruction.  The current health check script just validates that the local node has peers.
+   
+#### Q8. If a developer were to go into a cluster and manually stop certain components of the cluster, is there anything they would have to reset to ensure that wavelet-stack wouldn't exhibit strange behavior?
+  A8. Running "`manage-stack update`" will ensure that the stack reaches its configured state once again, which will start any [services](https://docs.docker.com/engine/reference/commandline/service/).
+  
+#### Q9. In what setting would I want to use WAVELET_CLEAN_VOLUMES ?
+  A9. You would use `WAVELET_CLEAN_VOLUMES` if you wanted to have the volumes cleaned after every `stop` (which includes in the middle of a `reset` which is a `stop` then `start`).  For example if you were testing building a stack from scratch and needed to wipe the database and all persistent storage after you are done with it.
+
+#### Q10. What is a swarm's lifecycle?  What is a stack's lifecycle?
+  A10. Swarms are created, and may be upgraded, expanded, or destroyed any time after they have been created.  Stacks may be defined (by creating a configuration for that stack using "`manage-stack edit-config`"), after being created they can be stopped, reset, have Wavelet on every Wavelet container instance be restarted simultaneously using the "`manage-stack restart-wavelet`" command, updated (to apply any changed configuration to the running stack, this will only apply any thing that has changed, if nothing has changed then this will be a no-op), attached to, shelled into, logs inspected, benchmarked, duplicated, or have any Wavelet instances database saved.  Once a benchmark has been started, all of those same things can be done, as well as being able to stop the benchmark. 
+
+#### Q11. Could a wavelet instance get stuck in a bootloop when the cluster is being bootstrapped? What are the possible reasons why?
+  A11. Yes, if the stack is misconfigured in many ways Wavelet may not be able to function.  Please refer to the Wavelet documentation to determine under what conditions this could occur.
+
+#### Q12. How exactly are cluster configurations (devnet, mainnet, etc.) configured/stored/replicated/maintained in wavelet-stack?
+  A12. If using an remote swarm: Every time you use `manage-stack edit-config` the new configuration file is uploaded to `/etc/wavelet-stack/<stackName>` on the manager of the Swarm.  If not using a remote swarm: The files are stored in `config/stacks/<stackName>`
+
+#### Q13. What exact HTTP APIs does wavelet-stack call on a wavelet node, what parameters are the calls performed with, and at what part of a clusters lifecycle are they called?
+  A13. It calls `/node/connect`, `/node/disconnect`, and `/ledger`.  The `/node/connect` and `/node/disconnect` API calls use the IP and port of a peer to connect to or disconnect from (respectively).  The `/ledger` API call is done with no parameters.  The `/node/connect` and `/node/disconnect` APIs are called when a Wavelet instance has fewer than `WAVELET_SNOWBALL_K` peers and there are additional peers in the peer registration keys within etcd on the "sync" node.  The `/ledger` API call is used to determine how many peers are currently connected to the Wavelet instance as part of determing whether new peers need to be added, as well as part of the Wavelet health check.
+
+#### Q14. Is there any local state stored via wavelet-stack? Or is all state stored remotely?
+  A14. The `docker-machine` information is stored for remote Docker Swarms.  If a remote swarm is used then stack information is also stored on the swarm node, otherwise stack information is stored locally.
+
+#### Q15. What are the preconditions for running each and every single command? What errors can each command possibly produce and what can be done to resolve these errors?
+  A15. There are only 3 commands: `manage-swarm`, `manage-stack`, and `build-all-nodes`.  You only really need to run `build-all-nodes` to build the Docker images before running `manage-stack`.  You can use an remote swarm, in which case you will need to use `manage-swarm` to create or import an remote swarm.  By default the local machine is used for the swarm.
+
+#### Q16. What exactly is the upgrade process for upgrading to a new version of Wavelet? If the auto-updater is not working, what could be done instead?
+  A16. This is handled by upgrading to a new Docker image, and calling `docker stack deploy`, which is documented by [Docker stack deploy](https://docs.docker.com/engine/reference/commandline/stack_deploy/), there's nothing special about `manage-stack` apart from modifying the docker-compose.yml file if needed based on the Stack configuration -- it's the same as a start

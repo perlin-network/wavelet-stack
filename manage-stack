@@ -1,16 +1,14 @@
 #! /usr/bin/env bash
 
-if [ ! -x "$(command -v docker-machine)" ]; then
-	echo "\"docker-machine\" is required, but missing" >&2
+# Check for basic commands which are required before this script
+# can be useful.
+for checkCommand in docker-machine docker jq curl; do
+	if [ ! -x "$(command -v "${checkCommand}")" ]; then
+		echo "\"${checkCommand}\" is required, but missing" >&2
 
-	exit 1
-fi
-
-if [ ! -x "$(command -v docker)" ]; then
-	echo "\"docker\" is required, but missing" >&2
-
-	exit 1
-fi
+		exit 1
+	fi
+done
 
 stackName=''
 swarmName=''
@@ -23,6 +21,8 @@ function machinesInSwarm() {
 	docker node ls --format '{{.Hostname}}'
 }
 
+# Determine if any volumes for the current stack exist on any
+# of the nodes in the swarm
 function volumesExist() {
 	local nodeName
 	local retval
@@ -44,6 +44,8 @@ function volumesExist() {
 	return "${retval}"
 }
 
+# Determine if there are any benchmark instances running for
+# the current stack
 function benchmarkRunning() {
 	local replicas
 
@@ -59,6 +61,8 @@ function benchmarkRunning() {
 	fi
 }
 
+# Determine, from Docker Swarm, what the Advertised address is
+# of the current swarm.
 function managerAddress() {
 	local managerNode managerAddr
 
@@ -68,6 +72,8 @@ function managerAddress() {
 	echo "${managerAddr}"
 }
 
+# For the current stack, look up the exposed port for a given
+# internal port
 function getExternalPort() {
 	local internalPort
 	local externalPort
@@ -83,6 +89,11 @@ function getExternalPort() {
 	echo "${externalPort}"
 }
 
+# In order for the stack to be able to internally map external ports
+# to internal ones the stack configuration needs to be accessible to
+# the nodes within the stack.  This is done by pushing the Docker
+# Stack instance configuration into etcd on the "sync" instance
+# whenever it changes.
 function pushConfigToEtcd() {
 	local managerAddr
 	local taskID containerID
@@ -137,6 +148,9 @@ _EOF_
 	return 0
 }
 
+# Remove all the volumes for the current stack on a swarm.  This
+# returns immediately if "WAVELET_CLEAN_VOLUMES" is not specified
+# as exactly "yes"
 function cleanVolumes() {
 	if [ "$1" = '--force' ]; then
 		WAVELET_CLEAN_VOLUMES='yes'
@@ -163,6 +177,11 @@ function cleanVolumes() {
 	fi
 }
 
+# Stop a stack, repeatedly kicking it while waiting
+# for it to reach the desired state (stopped).
+# Call cleanVolumes to clean the volumes (which
+# will do nothing unless WAVELET_CLEAN_VOLUMES is
+# specified as "yes", see above).
 function stop() {
 	while stackRunning; do
 		docker stack rm ${stackName}
@@ -172,6 +191,14 @@ function stop() {
 	cleanVolumes
 }
 
+# Start a stack onto a swarm.  This reads the "docker-compose.yml"
+# file and modifies it in order to comply with the current stack
+# configuration.  If the stack is already running, it will be
+# updated.  This is done by calling "docker deploy".
+#
+# If WAVELET_REBUILD_ON_START is specified as true then the
+# "build-all-nodes" script is run to rebuild all the Docker
+# images.
 function start() {
 	local configFile
 	local tmp
@@ -241,6 +268,7 @@ function start() {
 	fi
 }
 
+# Produce a summary of the status for the current stack on stdout
 function status() {
 	local running
 	local managerAddr
@@ -304,6 +332,8 @@ function status() {
 	return 0
 }
 
+# Internal function to set the "docker-machine" environment variables
+# to the correct host within a swarm for a specific Docker task ID.
 function setDockerMachineForTaskID() {
 	local taskID
 	local nodeID nodeName
@@ -319,6 +349,7 @@ function setDockerMachineForTaskID() {
 	return 0
 }
 
+# Internal function to look up a Docker containerID from a Docker task ID
 function containerIDFromTaskID() {
 	local taskID containerID
 
@@ -334,6 +365,9 @@ function containerIDFromTaskID() {
 	return 0
 }
 
+# Utility function to look up the Docker task ID for a given
+# Wavelet-Stack "node ID" (such as 1, 2, loadbalancer, etc)
+# for the current stack.
 function taskIDFromNodeID() {
 	local nodeID taskName taskID
 	local nodeIndex
@@ -370,6 +404,7 @@ function taskIDFromNodeID() {
 	echo "${taskID}"
 }
 
+# CLI function to attach to a node ID for the current stack
 function attach() {
 	local nodeID taskID containerID
 
@@ -387,6 +422,8 @@ function attach() {
 	docker attach --sig-proxy=false "${containerID}"
 }
 
+# CLI function to create an interactive shell and tty on a particular node ID
+# for the current stack, or run a command on that node ID if specified.
 function shell() {
 	local nodeID taskID containerID
 	local allocateTty
@@ -426,6 +463,8 @@ function shell() {
 	docker exec -i "${args[@]}" "${containerID}" "$@"
 }
 
+# CLI function to dump the logs for a given node ID.  This is
+# really just a wrapper around "docker service logs"
 function logs() {
 	local nodeID taskID containerID
 
@@ -442,6 +481,8 @@ function logs() {
 	docker service logs "$@" "${taskID}"
 }
 
+# CLI function attach a debugger to the wavelet process on a node ID
+# on the current stack
 function debugWavelet() {
 	local nodeID taskID containerID
 
@@ -457,6 +498,7 @@ function debugWavelet() {
 	shell "${nodeID}" bash -c '/opt/perlin/bin/dlv attach "$(pgrep -x /wavelet)"'
 }
 
+# CLI function to print usage information
 function usage() {
 	echo "Usage: manage-stack [-s <stackName>] {stop|start|update|restart-wavelet|reset|status}"
 	echo "       manage-stack [-s <stackName>] benchmark [<count>]"
@@ -468,6 +510,11 @@ function usage() {
 	echo "       manage-stack [-s <stackName>] duplicate-stack <newStackName>"
 }
 
+# CLI function to update the stack configuration for the current stack
+# to scale up/down the number of running benchmark nodes.  By default
+# it will scale to 1 benchmark node.  After the benchmark nodes are
+# running it will attach to the first benchmark node to print the
+# benchmark results interactively
 function benchmark() {
 	local count
 
@@ -480,14 +527,21 @@ function benchmark() {
 	attach benchmark
 }
 
+# CLI function scale the number of benchmark nodes to 0
 function nobenchmark() {
 	docker service scale "${stackName}_benchmark=0"
 }
 
+# CLI function to dump the Wavelet Stack configuration for the current
+# stack
 function dumpConfig() {
 	set | egrep '^(WAVELET_|REGISTRY=)'
 }
 
+# CLI function to interactively edit the current stack's Wavelet Stack
+# configuration.  It will re-upload it to the first node in the swarm if
+# using a remote swarm, otherwise the new configuration will be stored
+# in the local configuration file for the stack.
 function editConfig() {
 	local tmpfile
 
@@ -517,6 +571,8 @@ function editConfig() {
 	return 0
 }
 
+# CLI function to dump the database for a given node ID from the current stack
+# into a tarball.
 function dumpDB() {
 	local nodeID outputFile
 	local tmpfile retval
@@ -574,6 +630,8 @@ _EOF_
 	return "${retval}"
 }
 
+# Internal function to call "manage-stack" without compounding values
+# specified.
 function callSelf() {
 	(
 		unset $(export | grep '^declare -x ' | sed 's@=.*$@@;s@^.* @@')
@@ -584,6 +642,9 @@ function callSelf() {
 	)
 }
 
+# CLI function to duplicate an existing stack into a new one.  This
+# copies the configuration and database.  The two stacks do not need
+# to be on the same swarm.
 function duplicateStack() {
 	local destStackName
 	local newStackEnvFile
@@ -658,6 +719,8 @@ function duplicateStack() {
 	return "${retval}"
 }
 
+# CLI function to copy files to/from a node in the current stack.  It is
+# a wrapper around "docker cp".
 function copyFiles() {
 	local arg args
 	local nodeID taskID containerID
@@ -689,6 +752,8 @@ function copyFiles() {
 	docker cp "${args[@]}"
 }
 
+# Internal function to run a command on all instances of a node for
+# a given Docker service for the current stack.
 function runOnService() {
 	local service args
 	local taskIDs
@@ -715,10 +780,13 @@ function runOnService() {
 
 }
 
+# Save the startup environment so we can reset to it, needed for some internal functions
 startupEnvironment="$(export)"
 
+# To make operating easier, change directories to the directory this script is in
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
+# Process optional arguments
 setStackName=''
 while getopts 's:' arg; do
 	case "${arg}" in
@@ -736,6 +804,7 @@ shift $[${OPTIND} - 1]
 action="$1"
 shift
 
+# Load configuration files for the current stack
 configDir="./config"
 globalEnvFile="${configDir}/default"
 if [ -f "${globalEnvFile}" ]; then
@@ -769,6 +838,7 @@ if [ -f "${swarmEnvFile}" ]; then
 	. "${swarmEnvFile}"
 fi
 
+# If using a remote swarm, pull the configuration from the remote swarm
 if [ -n "${DOCKER_MACHINE_NAME}" ]; then
 	eval "$(docker-machine ssh "${DOCKER_MACHINE_NAME}" "cat '/etc/wavelet-stack/${stackName}' 2>/dev/null; exit 0")" || (
 		echo "Unable to login to docker machine host" >&2
@@ -781,6 +851,7 @@ export WAVELET_API_HOST WAVELET_API_ACME_ACCOUNT_KEY
 export WAVELET_API_PORT WAVELET_RPC_PORT
 export WAVELET_BACKUP_DB
 
+# Map the CLI commands to their functions
 case "${action}" in
 	stop)
 		stop
