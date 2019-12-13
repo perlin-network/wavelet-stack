@@ -106,7 +106,9 @@ function create_digitalocean() {
 	pids=()
 	for ((idx = 1; idx <= count; idx++)) {
 		machineName="${name}-$[${startIdx} + ${idx} - 1]"
-		docker-machine create --driver digitalocean --digitalocean-access-token "${token}" "${docker_machine_args[@]}" "${machineName}" &
+		docker-machine create --driver digitalocean --digitalocean-image=ubuntu-18-04-x64 \
+                   --digitalocean-monitoring=true	\
+ --digitalocean-access-token "${token}" "${docker_machine_args[@]}" "${machineName}" &
 		pids+=("$!")
 	}
 	wait "${pids[@]}"
